@@ -33,7 +33,7 @@ export function registerHandlers(bot: Bot): void {
   // but if the user types free text that looks like an accidental new
   // command while a session is active, we still prioritize the session.
   bot.on("message:text", async (ctx) => {
-    const user = await getOrCreateUser(BigInt(ctx.from.id));
+    const user = await getOrCreateUser(BigInt(ctx.from!.id));
 
     const consumedByNotes = await handleNotesTextInput(ctx, user.id);
     if (consumedByNotes) return;

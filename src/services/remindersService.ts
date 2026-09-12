@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { ReminderStatus } from "@prisma/client";
 import { isInPast } from "@/lib/time";
 import { ValidationError } from "./notesService";
+export { ValidationError };
 
 const MAX_REMINDER_TEXT_LENGTH = 1000;
 

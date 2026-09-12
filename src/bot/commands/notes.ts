@@ -61,7 +61,7 @@ notesComposer.command("note", async (ctx) => {
     return;
   }
 
-  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const user = await getOrCreateUser(BigInt(ctx.from!.id));
   const note = await getOwnedNote(user.id, id);
   if (!note) {
     await ctx.reply("Заметка не найдена.");

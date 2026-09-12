@@ -38,7 +38,7 @@ remindersComposer.command("settimezone", async (ctx) => {
     await ctx.reply("⚠️ Не удалось распознать часовой пояс. Проверьте название, например: Europe/Amsterdam, Asia/Yerevan.");
     return;
   }
-  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const user = await getOrCreateUser(BigInt(ctx.from!.id));
   const { prisma } = await import("@/lib/prisma");
   await prisma.user.update({ where: { id: user.id }, data: { timezone: tz } });
   await ctx.reply(`✅ Часовой пояс установлен: ${tz}`);
@@ -88,7 +88,7 @@ remindersComposer.command("cancelreminder", async (ctx) => {
     await ctx.reply("Использование: /cancelreminder <номер>");
     return;
   }
-  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const user = await getOrCreateUser(BigInt(ctx.from!.id));
   await ctx.reply(`Удалить напоминание #${id}?`, {
     reply_markup: confirmDeleteKeyboard("reminder", id),
   });
