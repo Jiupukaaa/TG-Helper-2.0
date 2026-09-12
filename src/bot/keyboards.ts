@@ -18,17 +18,37 @@ export const remindersMenuKeyboard = new InlineKeyboard()
   .row()
   .text("⬅️ Назад", "menu:main");
 
+export function notesDeleteSelectionKeyboard(noteIds: number[]): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  noteIds.forEach((id, index) => {
+    keyboard.text(`#${id}`, `notes:delete_select:${id}`);
+    if (index % 2 === 1) keyboard.row();
+  });
+  if (noteIds.length % 2 === 1) keyboard.row();
+  keyboard.text("⬅️ К списку", "notes:list");
+  return keyboard;
+}
+
+export function remindersDeleteSelectionKeyboard(reminderIds: number[]): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  reminderIds.forEach((id, index) => {
+    keyboard.text(`#${id}`, `reminders:delete_select:${id}`);
+    if (index % 2 === 1) keyboard.row();
+  });
+  if (reminderIds.length % 2 === 1) keyboard.row();
+  keyboard.text("⬅️ К списку", "reminders:list");
+  return keyboard;
+}
+
 export function noteItemKeyboard(noteId: number): InlineKeyboard {
   return new InlineKeyboard()
     .text("✏️ Изменить", `notes:edit:${noteId}`)
-    .text("🗑 Удалить", `notes:delete:${noteId}`)
     .row()
     .text("⬅️ К списку", "notes:list");
 }
 
 export function reminderItemKeyboard(reminderId: number): InlineKeyboard {
   return new InlineKeyboard()
-    .text("🗑 Удалить", `reminders:delete:${reminderId}`)
     .row()
     .text("⬅️ К списку", "reminders:list");
 }
