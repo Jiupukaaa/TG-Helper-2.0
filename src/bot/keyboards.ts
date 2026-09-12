@@ -18,6 +18,16 @@ export const remindersMenuKeyboard = new InlineKeyboard()
   .row()
   .text("⬅️ Назад", "menu:main");
 
+export const notesListKeyboard = new InlineKeyboard()
+  .text("🗑 Удалить", "notes:delete_mode")
+  .row()
+  .text("⬅️ К меню заметок", "menu:notes");
+
+export const remindersListKeyboard = new InlineKeyboard()
+  .text("🗑 Удалить", "reminders:delete_mode")
+  .row()
+  .text("⬅️ К меню напоминаний", "menu:reminders");
+
 export function notesDeleteSelectionKeyboard(noteIds: number[]): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   noteIds.forEach((id, index) => {
@@ -48,9 +58,7 @@ export function noteItemKeyboard(noteId: number): InlineKeyboard {
 }
 
 export function reminderItemKeyboard(reminderId: number): InlineKeyboard {
-  return new InlineKeyboard()
-    .row()
-    .text("⬅️ К списку", "reminders:list");
+  return new InlineKeyboard().text("⬅️ К списку", "reminders:list");
 }
 
 export const cancelKeyboard = new InlineKeyboard().text("❌ Отмена", "session:cancel");
