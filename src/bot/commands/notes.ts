@@ -65,7 +65,11 @@ notesComposer.callbackQuery("notes:delete_mode", async (ctx) => {
     return;
   }
 
-  await ctx.editMessageText("🗑 Выберите номер заметки для удаления:", {
+  const lines = notes
+    .map((note) => `#${note.id} — ${note.text.length > 60 ? note.text.slice(0, 60) + "…" : note.text}`)
+    .join("\n");
+
+  await ctx.editMessageText(`🗑 Выберите номер заметки для удаления:\n\n${lines}`, {
     reply_markup: notesDeleteSelectionKeyboard(notes.map((note) => note.id)),
   });
 });
