@@ -12,6 +12,7 @@ import {
 import {
   notesMenuKeyboard,
   noteItemKeyboard,
+  notesListKeyboard,
   notesDeleteSelectionKeyboard,
   cancelKeyboard,
   confirmDeleteKeyboard,
@@ -50,10 +51,7 @@ notesComposer.callbackQuery("notes:list", async (ctx) => {
     .join("\n");
 
   await ctx.editMessageText(`📋 Ваши заметки:\n\n${lines}\n\nВыберите действие:`, {
-    reply_markup: notesMenuKeyboard
-      .clone()
-      .row()
-      .text("🗑 Удалить", "notes:delete_mode"),
+    reply_markup: notesListKeyboard,
   });
 });
 
@@ -137,10 +135,6 @@ notesComposer.callbackQuery(/^notes:delete_confirm:(\d+)$/, async (ctx) => {
   await ctx.editMessageText("🗑 Заметка удалена.", { reply_markup: notesMenuKeyboard });
 });
 
-/**
- * Handles free-text input while the user is in a notes-related session step
- * (creating or editing a note). Returns true if it consumed the message.
- */
 export async function handleNotesTextInput(ctx: any, userId: number): Promise<boolean> {
   const session = await getSession(userId);
   if (!session) return false;
@@ -181,7 +175,7 @@ export async function handleNotesTextInput(ctx: any, userId: number): Promise<bo
       }
     } catch (err) {
       if (err instanceof ValidationError) {
-        await ctx.reply(`⚠️ ${err.message}\nПопробуйте ещё раз:", { reply_markup: cancelKeyboard });
+        await ctx.reply(`⚠️ ${err.message}\nПопробуйте ещё раз:`, { reply_markup: cancelKeyboard });
       } else {
         throw err;
       }
