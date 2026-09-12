@@ -94,7 +94,11 @@ remindersComposer.callbackQuery("reminders:delete_mode", async (ctx) => {
     return;
   }
 
-  await ctx.editMessageText("🗑 Выберите номер напоминания для удаления:", {
+  const lines = reminders
+    .map((reminder) => `#${reminder.id} — ${formatLocalDateTime(reminder.dueAt, user.timezone)} — ${reminder.text}`)
+    .join("\n");
+
+  await ctx.editMessageText(`🗑 Выберите номер напоминания для удаления:\n\n${lines}`, {
     reply_markup: remindersDeleteSelectionKeyboard(reminders.map((reminder) => reminder.id)),
   });
 });
@@ -124,9 +128,11 @@ remindersComposer.command("cancelreminder", async (ctx) => {
     await ctx.reply("Использование: /cancelreminder <номер>");
     return;
   }
+
   const user = await getOrCreateUser(BigInt(ctx.from!.id));
-  await ctx.reply(`Удалить напоминание #${id}?`, {
-    reply_markup: confirmDeleteKeyboard("reminder", id),
+  const deleted = await deleteReminder(user.id, id);
+  await ctx.reply(deleted ? "🗑 Напоминание удалено." : "Напоминание не найдено.", {
+    reply_markup: remindersMenuKeyboard,
   });
 });
 
@@ -157,48 +163,37 @@ export async function handleReminderTextInput(ctx: any, userId: number): Promise
   if (!text) return false;
 
   if (session.step === SessionStep.REMINDER_AWAITING_TEXT) {
-    const trimmed = text.trim();
-    if (trimmed.length === 0 || trimmed.length > 1000) {
-      await ctx.reply("⚠️ Текст должен быть от 1 до 1000 символов. Попробуйте ещё раз:", {
-        reply_markup: cancelKeyboard,
-      });
-      return true;
+    try {
+      const trimmed = text.trim();
+      if (!trimmed) throw new ValidationError("Текст напоминания не может быть пустым.");
+      if (trimmed.length > 1000) throw new ValidationError("Слишком длинный текст (максимум 1000 символов).");
+      await setSessionStep(userId, SessionStep.REMINDER_AWAITING_DATETIME, { text: trimmed });
+      await ctx.reply("Введите дату и время в формате DD.MM.YYYY HH:mm:", { reply_markup: cancelKeyboard });
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        await ctx.reply(`⚠️ ${err.message}\nПопробуйте ещё раз:`, { reply_markup: cancelKeyboard });
+      } else {
+        throw err;
+      }
     }
-    await setSessionStep(userId, SessionStep.REMINDER_AWAITING_DATETIME, { text: trimmed });
-    await ctx.reply(
-      "Когда напомнить? Введите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ\nНапример: 25.12.2026 09:00",
-      { reply_markup: cancelKeyboard }
-    );
     return true;
   }
 
   if (session.step === SessionStep.REMINDER_AWAITING_DATETIME) {
     const draft = (session.draft as { text?: string } | null) ?? {};
-    const reminderText = draft.text;
-    if (!reminderText) {
+    if (!draft.text) {
       await clearSession(userId);
       await ctx.reply("Что-то пошло не так, начните заново через /reminders.");
       return true;
     }
 
-    const { prisma } = await import("@/lib/prisma");
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    const timezone = user?.timezone ?? DEFAULT_TIMEZONE;
-
-    const parsed = parseLocalDateTime(text, timezone);
-    if (!parsed) {
-      await ctx.reply(
-        "⚠️ Не удалось распознать дату. Формат: ДД.ММ.ГГГГ ЧЧ:ММ, например: 25.12.2026 09:00\nПопробуйте ещё раз:",
-        { reply_markup: cancelKeyboard }
-      );
-      return true;
-    }
-
     try {
-      const reminder = await createReminder(userId, reminderText, parsed);
+      const user = await getOrCreateUser(BigInt(ctx.from!.id));
+      const dueAt = parseLocalDateTime(text.trim(), user.timezone);
+      const reminder = await createReminder(userId, draft.text, dueAt);
       await clearSession(userId);
       await ctx.reply(
-        `✅ Напоминание #${reminder.id} создано на ${formatLocalDateTime(reminder.dueAt, timezone)} (${timezone}).`,
+        `✅ Напоминание #${reminder.id} создано на ${formatLocalDateTime(reminder.dueAt, user.timezone)}.`,
         { reply_markup: remindersMenuKeyboard }
       );
     } catch (err) {
