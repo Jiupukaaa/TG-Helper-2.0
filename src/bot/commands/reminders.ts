@@ -190,6 +190,9 @@ export async function handleReminderTextInput(ctx: any, userId: number): Promise
     try {
       const user = await getOrCreateUser(BigInt(ctx.from!.id));
       const dueAt = parseLocalDateTime(text.trim(), user.timezone);
+      if (!dueAt) {
+        throw new ValidationError("Неверный формат даты и времени. Используйте DD.MM.YYYY HH:mm.");
+      }
       const reminder = await createReminder(userId, draft.text, dueAt);
       await clearSession(userId);
       await ctx.reply(
