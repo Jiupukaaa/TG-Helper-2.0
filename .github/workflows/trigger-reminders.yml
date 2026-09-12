@@ -12,18 +12,33 @@ concurrency:
 jobs:
   trigger:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
       - name: Call /api/cron/reminders
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           TARGET_URL: ${{ vars.TG_HELPER_URL }}
         run: |
+          set -euo pipefail
+
           if [ -z "$TARGET_URL" ]; then
-            echo "::error::Repository variable TG_HELPER_URL is not set..."
+            echo "::error::Repository variable TG_HELPER_URL is not set"
             exit 1
           fi
-          curl --fail --show-error --silent \
+
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::Repository secret CRON_SECRET is not set"
+            exit 1
+          fi
+
+          RESPONSE=$(curl \
+            --fail-with-body \
+            --show-error \
+            --silent \
             --request POST \
             --header "Authorization: Bearer ${CRON_SECRET}" \
             --max-time 65 \
-            "${TARGET_URL%/}/api/cron/reminders"
+            --write-out '\nHTTP_STATUS=%{http_code}\n' \
+            "${TARGET_URL%/}/api/cron/reminders")
+
+          echo "$RESPONSE"
