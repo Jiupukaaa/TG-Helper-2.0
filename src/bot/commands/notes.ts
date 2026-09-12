@@ -12,6 +12,7 @@ import {
 import {
   notesMenuKeyboard,
   noteItemKeyboard,
+  notesDeleteSelectionKeyboard,
   cancelKeyboard,
   confirmDeleteKeyboard,
 } from "@/bot/keyboards";
@@ -48,8 +49,44 @@ notesComposer.callbackQuery("notes:list", async (ctx) => {
     .map((n) => `#${n.id} — ${n.text.length > 60 ? n.text.slice(0, 60) + "…" : n.text}`)
     .join("\n");
 
-  await ctx.editMessageText(`📋 Ваши заметки:\n\n${lines}\n\nОтправьте /note <номер> чтобы открыть.`, {
-    reply_markup: notesMenuKeyboard,
+  await ctx.editMessageText(`📋 Ваши заметки:\n\n${lines}\n\nВыберите действие:`, {
+    reply_markup: notesMenuKeyboard
+      .clone()
+      .row()
+      .text("🗑 Удалить", "notes:delete_mode"),
+  });
+});
+
+notesComposer.callbackQuery("notes:delete_mode", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const notes = await listNotes(user.id);
+
+  if (notes.length === 0) {
+    await ctx.editMessageText("У вас пока нет заметок.", { reply_markup: notesMenuKeyboard });
+    return;
+  }
+
+  await ctx.editMessageText("🗑 Выберите номер заметки для удаления:", {
+    reply_markup: notesDeleteSelectionKeyboard(notes.map((note) => note.id)),
+  });
+});
+
+notesComposer.callbackQuery(/^notes:delete_select:(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const noteId = Number(ctx.match[1]);
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const note = await getOwnedNote(user.id, noteId);
+
+  if (!note) {
+    await ctx.editMessageText("Заметка не найдена или уже удалена.", {
+      reply_markup: notesMenuKeyboard,
+    });
+    return;
+  }
+
+  await ctx.editMessageText(`Удалить заметку #${noteId}? Это необратимо.`, {
+    reply_markup: confirmDeleteKeyboard("note", noteId),
   });
 });
 
@@ -85,14 +122,6 @@ notesComposer.callbackQuery(/^notes:edit:(\d+)$/, async (ctx) => {
   await setSessionStep(user.id, SessionStep.NOTE_EDIT_AWAITING_TEXT, { noteId });
   await ctx.editMessageText(`Введите новый текст для заметки #${noteId}:`, {
     reply_markup: cancelKeyboard,
-  });
-});
-
-notesComposer.callbackQuery(/^notes:delete:(\d+)$/, async (ctx) => {
-  await ctx.answerCallbackQuery();
-  const noteId = Number(ctx.match[1]);
-  await ctx.editMessageText(`Удалить заметку #${noteId}? Это необратимо.`, {
-    reply_markup: confirmDeleteKeyboard("note", noteId),
   });
 });
 
@@ -152,7 +181,7 @@ export async function handleNotesTextInput(ctx: any, userId: number): Promise<bo
       }
     } catch (err) {
       if (err instanceof ValidationError) {
-        await ctx.reply(`⚠️ ${err.message}\nПопробуйте ещё раз:`, { reply_markup: cancelKeyboard });
+        await ctx.reply(`⚠️ ${err.message}\nПопробуйте ещё раз:", { reply_markup: cancelKeyboard });
       } else {
         throw err;
       }
