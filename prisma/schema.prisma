@@ -10,32 +10,21 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ---------------------------------------------------------------------------
-// User
-// ---------------------------------------------------------------------------
-// One row per allowed Telegram user. Access control (allowlist) itself lives
-// in an environment variable (ALLOWED_TELEGRAM_IDS), not in this table — this
-// table just stores per-user preferences and owns their data.
 model User {
   id         Int      @id @default(autoincrement())
   telegramId BigInt   @unique
-  // IANA timezone name, e.g. "Europe/Amsterdam". Defaults to UTC until the
-  // user runs /settimezone. Reminder date/time input is rejected until this
-  // is set to something other than the default (see reminder UX in README).
   timezone   String   @default("UTC")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   notes     Note[]
   reminders Reminder[]
+  shifts    Shift[]
   session   Session?
 
   @@map("users")
 }
 
-// ---------------------------------------------------------------------------
-// Note
-// ---------------------------------------------------------------------------
 model Note {
   id        Int      @id @default(autoincrement())
   text      String
@@ -48,13 +37,6 @@ model Note {
   @@map("notes")
 }
 
-// ---------------------------------------------------------------------------
-// Reminder
-// ---------------------------------------------------------------------------
-// PENDING    -> waiting for dueAt to arrive
-// PROCESSING -> a cron run has claimed this row and is (about to be) sending it
-// SENT       -> successfully delivered
-// FAILED     -> delivery permanently failed (e.g. bot blocked) or retries exhausted
 enum ReminderStatus {
   PENDING
   PROCESSING
@@ -65,45 +47,55 @@ enum ReminderStatus {
 model Reminder {
   id      Int    @id @default(autoincrement())
   text    String
-  // Always stored in UTC. Conversion to/from the user's local time happens
-  // only at the input/display boundary (see src/lib/time.ts).
   dueAt   DateTime
   status  ReminderStatus @default(PENDING)
 
-  // Set when a cron run claims the row (moves it to PROCESSING). Used to
-  // detect and recover stuck rows if a run crashes after claiming but
-  // before finishing (see reclaim logic in the cron endpoint).
   processingStartedAt DateTime?
-
-  sentAt     DateTime?
-  retryCount Int       @default(0)
-  lastError  String?
+  sentAt              DateTime?
+  retryCount          Int       @default(0)
+  lastError           String?
 
   ownerId   Int
   owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  shiftId   Int?
+  shift     Shift?   @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  offsetMinutes Int?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Composite index backing the cron's selection query:
-  // WHERE status = 'PENDING' AND dueAt <= now()
-  // (and the stuck-PROCESSING reclaim variant of the same query).
+  @@unique([shiftId, offsetMinutes])
   @@index([status, dueAt])
   @@index([ownerId])
+  @@index([shiftId])
   @@map("reminders")
 }
 
-// ---------------------------------------------------------------------------
-// Session
-// ---------------------------------------------------------------------------
-// Multi-step conversation state (e.g. "creating a reminder": text -> date ->
-// confirm). Stored in the DB rather than in memory because serverless
-// functions give no guarantee of a warm instance between webhook calls.
+model Shift {
+  id        Int        @id @default(autoincrement())
+  startAt  DateTime
+  ownerId  Int
+  owner    User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  reminders Reminder[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@unique([ownerId, startAt])
+  @@index([ownerId, startAt])
+  @@map("shifts")
+}
+
 enum SessionStep {
   IDLE
   NOTE_AWAITING_TEXT
   NOTE_EDIT_AWAITING_TEXT
   REMINDER_AWAITING_TEXT
   REMINDER_AWAITING_DATETIME
+  SHIFT_MANUAL_AWAITING_TIME
+  SHIFT_CYCLE_AWAITING_WORK_DAYS
+  SHIFT_CYCLE_AWAITING_OFF_DAYS
+  SHIFT_CYCLE_AWAITING_START_DATE
+  SHIFT_CYCLE_AWAITING_TIME
+  SHIFT_CYCLE_AWAITING_END_DATE
 }
 
 model Session {
@@ -112,12 +104,7 @@ model Session {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   step SessionStep @default(IDLE)
-
-  // Free-form scratch space for the in-progress draft (draft note text,
-  // draft reminder text, the target note/reminder id being edited, etc).
-  // Kept as a single JSON blob to avoid adding a column per scenario.
   draft Json?
-
   updatedAt DateTime @updatedAt
 
   @@map("sessions")

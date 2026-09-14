@@ -2,7 +2,9 @@ import { InlineKeyboard } from "grammy";
 
 export const mainMenuKeyboard = new InlineKeyboard()
   .text("📝 Заметки", "menu:notes")
-  .text("⏰ Напоминания", "menu:reminders");
+  .text("⏰ Напоминания", "menu:reminders")
+  .row()
+  .text("📅 График работы", "menu:shifts");
 
 export const notesMenuKeyboard = new InlineKeyboard()
   .text("➕ Новая заметка", "notes:new")
@@ -16,7 +18,7 @@ export const remindersMenuKeyboard = new InlineKeyboard()
   .row()
   .text("📋 Все напоминания", "reminders:list")
   .row()
-  .text("⬅️ Назад", "menu:main");
+  .text("⬅️ В главное меню", "menu:main");
 
 export const notesListKeyboard = new InlineKeyboard()
   .text("➕ Новая заметка", "notes:new")
@@ -29,13 +31,7 @@ export function notesPaginationKeyboard(page: number, totalPages: number): Inlin
   const keyboard = new InlineKeyboard();
   if (page > 0) keyboard.text("⬅️", `notes:list_page:${page - 1}`);
   if (page < totalPages - 1) keyboard.text("➡️", `notes:list_page:${page + 1}`);
-  keyboard
-    .row()
-    .text("➕ Новая заметка", "notes:new")
-    .row()
-    .text("🗑 Удалить", "notes:delete_mode")
-    .row()
-    .text("⬅️ К главному меню", "menu:main");
+  keyboard.row().text("➕ Новая заметка", "notes:new").row().text("🗑 Удалить", "notes:delete_mode").row().text("⬅️ К главному меню", "menu:main");
   return keyboard;
 }
 
@@ -67,21 +63,14 @@ export function remindersDeleteSelectionKeyboard(reminderIds: number[]): InlineK
 }
 
 export function noteItemKeyboard(noteId: number): InlineKeyboard {
-  return new InlineKeyboard()
-    .text("✏️ Изменить", `notes:edit:${noteId}`)
-    .row()
-    .text("⬅️ К списку", "notes:list");
+  return new InlineKeyboard().text("✏️ Изменить", `notes:edit:${noteId}`).row().text("⬅️ К списку", "notes:list");
 }
 
 export function notePaginationKeyboard(noteId: number, page: number, totalPages: number): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   if (page > 0) keyboard.text("⬅️", `notes:page:${noteId}:${page - 1}`);
   if (page < totalPages - 1) keyboard.text("➡️", `notes:page:${noteId}:${page + 1}`);
-  keyboard
-    .row()
-    .text("✏️ Изменить", `notes:edit:${noteId}`)
-    .row()
-    .text("⬅️ К списку", "notes:list");
+  keyboard.row().text("✏️ Изменить", `notes:edit:${noteId}`).row().text("⬅️ К списку", "notes:list");
   return keyboard;
 }
 
@@ -92,7 +81,5 @@ export function reminderItemKeyboard(reminderId: number): InlineKeyboard {
 export const cancelKeyboard = new InlineKeyboard().text("❌ Отмена", "session:cancel");
 
 export function confirmDeleteKeyboard(kind: "note" | "reminder", id: number): InlineKeyboard {
-  return new InlineKeyboard()
-    .text("✅ Да, удалить", `${kind}s:delete_confirm:${id}`)
-    .text("❌ Отмена", kind === "note" ? "notes:list" : "reminders:list");
+  return new InlineKeyboard().text("✅ Да, удалить", `${kind}s:delete_confirm:${id}`).text("❌ Отмена", kind === "note" ? "notes:list" : "reminders:list");
 }
