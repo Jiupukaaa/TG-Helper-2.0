@@ -25,13 +25,31 @@ function getNoteNumber(notes: Array<{ id: number }>, noteId: number): number | n
   return index === -1 ? null : index + 1;
 }
 
+async function getNotesListText(userId: number): Promise<string> {
+  const notes = await listNotes(userId);
+
+  if (notes.length === 0) {
+    return "📝 У вас пока нет заметок. Добавьте первую заметку:";
+  }
+
+  const lines = notes
+    .map((n, index) => `#${index + 1} — ${n.text.length > 60 ? n.text.slice(0, 60) + "…" : n.text}`)
+    .join("\n");
+
+  return `📋 Ваши заметки:\n\n${lines}\n\nВыберите действие:`;
+}
+
 notesComposer.command("notes", async (ctx) => {
-  await ctx.reply("📝 Заметки:", { reply_markup: notesMenuKeyboard });
+  const user = await getOrCreateUser(BigInt(ctx.from!.id));
+  const text = await getNotesListText(user.id);
+  await ctx.reply(text, { reply_markup: notesListKeyboard });
 });
 
 notesComposer.callbackQuery("menu:notes", async (ctx) => {
   await ctx.answerCallbackQuery();
-  await ctx.editMessageText("📝 Заметки:", { reply_markup: notesMenuKeyboard });
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const text = await getNotesListText(user.id);
+  await ctx.editMessageText(text, { reply_markup: notesListKeyboard });
 });
 
 notesComposer.callbackQuery("notes:new", async (ctx) => {
@@ -44,20 +62,8 @@ notesComposer.callbackQuery("notes:new", async (ctx) => {
 notesComposer.callbackQuery("notes:list", async (ctx) => {
   await ctx.answerCallbackQuery();
   const user = await getOrCreateUser(BigInt(ctx.from.id));
-  const notes = await listNotes(user.id);
-
-  if (notes.length === 0) {
-    await ctx.editMessageText("У вас пока нет заметок.", { reply_markup: notesMenuKeyboard });
-    return;
-  }
-
-  const lines = notes
-    .map((n, index) => `#${index + 1} — ${n.text.length > 60 ? n.text.slice(0, 60) + "…" : n.text}`)
-    .join("\n");
-
-  await ctx.editMessageText(`📋 Ваши заметки:\n\n${lines}\n\nВыберите действие:`, {
-    reply_markup: notesListKeyboard,
-  });
+  const text = await getNotesListText(user.id);
+  await ctx.editMessageText(text, { reply_markup: notesListKeyboard });
 });
 
 notesComposer.callbackQuery("notes:delete_mode", async (ctx) => {
@@ -66,7 +72,7 @@ notesComposer.callbackQuery("notes:delete_mode", async (ctx) => {
   const notes = await listNotes(user.id);
 
   if (notes.length === 0) {
-    await ctx.editMessageText("У вас пока нет заметок.", { reply_markup: notesMenuKeyboard });
+    await ctx.editMessageText("У вас пока нет заметок.", { reply_markup: notesListKeyboard });
     return;
   }
 
