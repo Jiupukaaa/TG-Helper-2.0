@@ -59,6 +59,18 @@ export function noteItemKeyboard(noteId: number): InlineKeyboard {
     .text("⬅️ К списку", "notes:list");
 }
 
+export function notePaginationKeyboard(noteId: number, page: number, totalPages: number): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  if (page > 0) keyboard.text("⬅️", `notes:page:${noteId}:${page - 1}`);
+  if (page < totalPages - 1) keyboard.text("➡️", `notes:page:${noteId}:${page + 1}`);
+  keyboard
+    .row()
+    .text("✏️ Изменить", `notes:edit:${noteId}`)
+    .row()
+    .text("⬅️ К списку", "notes:list");
+  return keyboard;
+}
+
 export function reminderItemKeyboard(reminderId: number): InlineKeyboard {
   return new InlineKeyboard().text("⬅️ К списку", "reminders:list");
 }
