@@ -21,6 +21,9 @@ async function ensureHandlers() {
       { command: "settimezone", description: "Установить часовой пояс" },
       { command: "cancelreminder", description: "Удалить напоминание по номеру" },
     ]);
+    await bot.api.setChatMenuButton({
+      menu_button: { type: "commands" },
+    });
     handlersRegistered = true;
   }
 }
