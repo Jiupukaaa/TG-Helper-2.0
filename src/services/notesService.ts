@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
 const MAX_NOTE_LENGTH = 4000; // Telegram message limit is 4096; leave headroom for formatting.
+export const VOICE_NOTE_TEXT = "🎙️ Голосовое сообщение";
 
 export class ValidationError extends Error {}
 
@@ -22,6 +23,12 @@ export async function createNote(ownerId: number, text: string) {
   return prisma.note.create({ data: { ownerId, text: validated } });
 }
 
+export async function createVoiceNote(ownerId: number, voiceFileId: string) {
+  return prisma.note.create({
+    data: { ownerId, text: VOICE_NOTE_TEXT, voiceFileId },
+  });
+}
+
 export async function listNotes(ownerId: number) {
   return prisma.note.findMany({
     where: { ownerId },
@@ -38,7 +45,10 @@ export async function updateNote(ownerId: number, noteId: number, text: string) 
   const validated = validateNoteText(text);
   const existing = await getOwnedNote(ownerId, noteId);
   if (!existing) return null;
-  return prisma.note.update({ where: { id: noteId }, data: { text: validated } });
+  return prisma.note.update({
+    where: { id: noteId },
+    data: { text: validated, voiceFileId: null },
+  });
 }
 
 export async function deleteNote(ownerId: number, noteId: number) {
