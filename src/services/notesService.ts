@@ -29,6 +29,15 @@ export async function createVoiceNote(ownerId: number, voiceFileId: string) {
   });
 }
 
+export async function replaceVoiceNote(ownerId: number, noteId: number, voiceFileId: string) {
+  const existing = await getOwnedNote(ownerId, noteId);
+  if (!existing?.voiceFileId) return null;
+  return prisma.note.update({
+    where: { id: noteId },
+    data: { text: VOICE_NOTE_TEXT, voiceFileId },
+  });
+}
+
 export async function listNotes(ownerId: number) {
   return prisma.note.findMany({
     where: { ownerId },
