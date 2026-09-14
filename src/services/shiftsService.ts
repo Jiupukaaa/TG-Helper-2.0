@@ -28,20 +28,26 @@ export function validateShiftStart(startAt: Date): void {
   }
 }
 
+function futureShiftReminderData(ownerId: number, startAt: Date, timezone: string, shiftId: number, name?: string | null) {
+  const now = Date.now();
+  return SHIFT_REMINDER_OFFSETS
+    .map((offsetMinutes) => ({
+      ownerId,
+      shiftId,
+      offsetMinutes,
+      dueAt: new Date(startAt.getTime() + offsetMinutes * 60_000),
+      text: buildShiftReminderText(offsetMinutes, startAt, timezone, name),
+    }))
+    .filter((reminder) => reminder.dueAt.getTime() > now);
+}
+
 export async function createShift(ownerId: number, startAt: Date, timezone: string, name?: string | null) {
   validateShiftStart(startAt);
   const normalizedName = name?.trim() || null;
   return prisma.$transaction(async (tx) => {
     const shift = await tx.shift.create({ data: { ownerId, startAt, name: normalizedName } });
-    await tx.reminder.createMany({
-      data: SHIFT_REMINDER_OFFSETS.map((offsetMinutes) => ({
-        ownerId,
-        shiftId: shift.id,
-        offsetMinutes,
-        dueAt: new Date(startAt.getTime() + offsetMinutes * 60_000),
-        text: buildShiftReminderText(offsetMinutes, startAt, timezone, normalizedName),
-      })),
-    });
+    const reminders = futureShiftReminderData(ownerId, startAt, timezone, shift.id, normalizedName);
+    if (reminders.length) await tx.reminder.createMany({ data: reminders });
     return shift;
   });
 }
@@ -58,15 +64,8 @@ export async function createShifts(ownerId: number, startAts: Date[], timezone: 
     const created = [];
     for (const startAt of unique) {
       const shift = await tx.shift.create({ data: { ownerId, startAt, name: normalizedName, cycleGroupId: cycleGroupId ?? null } });
-      await tx.reminder.createMany({
-        data: SHIFT_REMINDER_OFFSETS.map((offsetMinutes) => ({
-          ownerId,
-          shiftId: shift.id,
-          offsetMinutes,
-          dueAt: new Date(startAt.getTime() + offsetMinutes * 60_000),
-          text: buildShiftReminderText(offsetMinutes, startAt, timezone, normalizedName),
-        })),
-      });
+      const reminders = futureShiftReminderData(ownerId, startAt, timezone, shift.id, normalizedName);
+      if (reminders.length) await tx.reminder.createMany({ data: reminders });
       created.push(shift);
     }
     return created;
@@ -110,15 +109,8 @@ export async function updateShift(ownerId: number, shiftId: number, startAt: Dat
       where: { shiftId, status: { in: [ReminderStatus.PENDING, ReminderStatus.PROCESSING] } },
     });
     const updated = await tx.shift.update({ where: { id: shiftId }, data: { startAt, name: normalizedName } });
-    await tx.reminder.createMany({
-      data: SHIFT_REMINDER_OFFSETS.map((offsetMinutes) => ({
-        ownerId,
-        shiftId,
-        offsetMinutes,
-        dueAt: new Date(startAt.getTime() + offsetMinutes * 60_000),
-        text: buildShiftReminderText(offsetMinutes, startAt, timezone, normalizedName),
-      })),
-    });
+    const reminders = futureShiftReminderData(ownerId, startAt, timezone, shiftId, normalizedName);
+    if (reminders.length) await tx.reminder.createMany({ data: reminders });
     return updated;
   });
 }
@@ -130,10 +122,6 @@ export async function updateShiftName(ownerId: number, shiftId: number, name?: s
   return prisma.$transaction(async (tx) => {
     const updated = await tx.shift.update({ where: { id: shiftId }, data: { name: normalizedName } });
     if (timezone) {
-      await tx.reminder.updateMany({
-        where: { shiftId, status: { in: [ReminderStatus.PENDING, ReminderStatus.PROCESSING] } },
-        data: { text: "" },
-      });
       const reminders = await tx.reminder.findMany({ where: { shiftId, status: { in: [ReminderStatus.PENDING, ReminderStatus.PROCESSING] } } });
       for (const reminder of reminders) {
         await tx.reminder.update({ where: { id: reminder.id }, data: { text: buildShiftReminderText(reminder.offsetMinutes ?? 0, shift.startAt, timezone, normalizedName) } });
