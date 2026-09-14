@@ -1,9 +1,10 @@
 import { Bot } from "grammy";
+import { SessionStep } from "@prisma/client";
 import { authMiddleware } from "@/bot/middleware/auth";
-import { getOrCreateUser, clearSession, getSession } from "@/bot/session";
-import { mainMenuKeyboard, noteItemKeyboard } from "@/bot/keyboards";
+import { getOrCreateUser, clearSession, getSession, setSessionStep } from "@/bot/session";
+import { mainMenuKeyboard, voiceNoteSavedKeyboard, cancelKeyboard } from "@/bot/keyboards";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
-import { createVoiceNote, listNotes } from "@/services/notesService";
+import { createVoiceNote, listNotes, replaceVoiceNote } from "@/services/notesService";
 import { notesComposer, handleNotesTextInput, handleNotesVoiceInput } from "./notes";
 import { remindersComposer, handleReminderTextInput, handleReminderVoiceInput } from "./reminders";
 import { shiftsComposer, handleShiftTextInput } from "./shifts";
@@ -29,6 +30,21 @@ export function registerHandlers(bot: Bot): void {
     await ctx.editMessageText("Главное меню:", { reply_markup: mainMenuKeyboard });
   });
 
+  bot.callbackQuery(/^notes:voice_replace:(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const noteId = Number(ctx.match[1]);
+    const user = await getOrCreateUser(BigInt(ctx.from.id));
+    const note = await import("@/services/notesService").then(({ getOwnedNote }) => getOwnedNote(user.id, noteId));
+    if (!note?.voiceFileId) {
+      await ctx.editMessageText("Голосовая заметка не найдена.");
+      return;
+    }
+    await setSessionStep(user.id, SessionStep.NOTE_VOICE_REPLACE_AWAITING, { noteId });
+    await ctx.editMessageText("🎙️ Отправьте новое голосовое сообщение. Оно заменит текущее голосовое в этой заметке.", {
+      reply_markup: cancelKeyboard,
+    });
+  });
+
   bot.use(notesComposer);
   bot.use(remindersComposer);
   bot.use(shiftsComposer);
@@ -47,6 +63,31 @@ export function registerHandlers(bot: Bot): void {
     if (await handleReminderVoiceInput(ctx, user.id)) return;
 
     const session = await getSession(user.id);
+
+    if (session?.step === SessionStep.NOTE_VOICE_REPLACE_AWAITING) {
+      const draft = (session.draft as { noteId?: number } | null) ?? {};
+      const noteId = draft.noteId;
+      if (!noteId) {
+        await clearSession(user.id);
+        await ctx.reply("Что-то пошло не так, начните заново через /notes.");
+        return;
+      }
+
+      const updated = await replaceVoiceNote(user.id, noteId, ctx.message.voice.file_id);
+      await clearSession(user.id);
+      if (!updated) {
+        await ctx.reply("Голосовая заметка не найдена.");
+        return;
+      }
+
+      const notes = await listNotes(user.id);
+      const noteNumber = notes.findIndex((item) => item.id === updated.id) + 1;
+      await ctx.reply(`📝 Заметка #${noteNumber}\n\n🎙️ Голосовое сообщение заменено.`, {
+        reply_markup: voiceNoteSavedKeyboard(updated.id),
+      });
+      return;
+    }
+
     if (session && session.step !== "IDLE") {
       await ctx.reply("Сейчас бот ожидает другой тип сообщения. Завершите текущий сценарий или отмените его.");
       return;
@@ -57,7 +98,7 @@ export function registerHandlers(bot: Bot): void {
     const notes = await listNotes(user.id);
     const noteNumber = notes.findIndex((item) => item.id === note.id) + 1;
     await ctx.reply(`📝 Заметка #${noteNumber}\n\n🎙️ Голосовое сообщение`, {
-      reply_markup: noteItemKeyboard(note.id, true),
+      reply_markup: voiceNoteSavedKeyboard(note.id),
     });
   });
 
