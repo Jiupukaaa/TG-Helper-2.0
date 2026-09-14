@@ -20,6 +20,10 @@ export const remindersMenuKeyboard = new InlineKeyboard()
   .row()
   .text("⬅️ В главное меню", "menu:main");
 
+export function voiceNoteSavedKeyboard(noteId: number): InlineKeyboard {
+  return new InlineKeyboard().text("🎙️ Перезаписать", `notes:voice_replace:${noteId}`);
+}
+
 export function notesListKeyboardWithVoiceActions(voiceNotes: Array<{ id: number; number: number }>): InlineKeyboard {
   const keyboard = new InlineKeyboard()
     .text("➕ Новая заметка", "notes:new");
