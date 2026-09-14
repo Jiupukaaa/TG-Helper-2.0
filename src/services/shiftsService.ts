@@ -98,6 +98,13 @@ export async function deleteShiftGroup(ownerId: number, cycleGroupId: string) {
   return result.count;
 }
 
+export async function deleteAllShiftGroups(ownerId: number) {
+  const result = await prisma.shift.deleteMany({
+    where: { ownerId, cycleGroupId: { not: null }, startAt: { gt: new Date() } },
+  });
+  return result.count;
+}
+
 export async function updateShift(ownerId: number, shiftId: number, startAt: Date, timezone: string, name?: string | null) {
   const shift = await getOwnedShift(ownerId, shiftId);
   if (!shift || shift.startAt <= new Date()) return null;
