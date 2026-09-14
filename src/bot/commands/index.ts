@@ -2,6 +2,7 @@ import { Bot } from "grammy";
 import { authMiddleware } from "@/bot/middleware/auth";
 import { getOrCreateUser, clearSession } from "@/bot/session";
 import { mainMenuKeyboard } from "@/bot/keyboards";
+import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { notesComposer, handleNotesTextInput } from "./notes";
 import { remindersComposer, handleReminderTextInput } from "./reminders";
 
@@ -9,10 +10,15 @@ export function registerHandlers(bot: Bot): void {
   bot.use(authMiddleware);
 
   bot.command("start", async (ctx) => {
-    await getOrCreateUser(BigInt(ctx.from!.id));
+    const user = await getOrCreateUser(BigInt(ctx.from!.id));
+    const timezoneMessage =
+      user.timezone === DEFAULT_TIMEZONE
+        ? "Сначала укажите часовой пояс:\n/settimezone Europe/Amsterdam\n\n"
+        : `Часовой пояс: ${user.timezone}\n\n`;
+
     await ctx.reply(
       "👋 Привет! Я TG Helper — личный помощник для заметок и напоминаний.\n\n" +
-        "Сначала укажите часовой пояс:\n/settimezone Europe/Amsterdam\n\n" +
+        timezoneMessage +
         "Дальше используйте меню ниже или команды /notes и /reminders.",
       { reply_markup: mainMenuKeyboard }
     );
