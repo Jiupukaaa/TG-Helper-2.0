@@ -25,6 +25,20 @@ export const notesListKeyboard = new InlineKeyboard()
   .row()
   .text("⬅️ К главному меню", "menu:main");
 
+export function notesPaginationKeyboard(page: number, totalPages: number): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  if (page > 0) keyboard.text("⬅️", `notes:list_page:${page - 1}`);
+  if (page < totalPages - 1) keyboard.text("➡️", `notes:list_page:${page + 1}`);
+  keyboard
+    .row()
+    .text("➕ Новая заметка", "notes:new")
+    .row()
+    .text("🗑 Удалить", "notes:delete_mode")
+    .row()
+    .text("⬅️ К главному меню", "menu:main");
+  return keyboard;
+}
+
 export const remindersListKeyboard = new InlineKeyboard()
   .text("🗑 Удалить", "reminders:delete_mode")
   .row()
@@ -44,7 +58,7 @@ export function notesDeleteSelectionKeyboard(noteIds: number[]): InlineKeyboard 
 export function remindersDeleteSelectionKeyboard(reminderIds: number[]): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   reminderIds.forEach((id, index) => {
-    keyboard.text(`#${id}`, `reminders:delete_select:${id}`);
+    keyboard.text(`#${id}", `reminders:delete_select:${id}`);
     if (index % 2 === 1) keyboard.row();
   });
   if (reminderIds.length % 2 === 1) keyboard.row();
