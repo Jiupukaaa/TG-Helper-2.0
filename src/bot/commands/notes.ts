@@ -376,7 +376,9 @@ export async function handleNotesVoiceInput(ctx: any, userId: number): Promise<b
     await clearSession(userId);
     const notes = await listNotes(userId);
     const noteNumber = getNoteNumber(notes, note.id) ?? 1;
-    await ctx.reply(`✅ Голосовая заметка #${noteNumber} сохранена.`, { reply_markup: notesMenuKeyboard });
+    await ctx.reply(`📝 Заметка #${noteNumber}\n\n🎙️ Голосовое сообщение`, {
+      reply_markup: noteItemKeyboard(note.id, true),
+    });
     return true;
   }
 
