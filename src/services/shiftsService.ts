@@ -46,7 +46,7 @@ export async function createShift(ownerId: number, startAt: Date, timezone: stri
   });
 }
 
-export async function createShifts(ownerId: number, startAts: Date[], timezone: string, name?: string | null) {
+export async function createShifts(ownerId: number, startAts: Date[], timezone: string, name?: string | null, cycleGroupId?: string | null) {
   const unique = Array.from(new Map(startAts.map((date) => [date.getTime(), date])).values()).sort(
     (a, b) => a.getTime() - b.getTime()
   );
@@ -57,7 +57,7 @@ export async function createShifts(ownerId: number, startAts: Date[], timezone: 
   return prisma.$transaction(async (tx) => {
     const created = [];
     for (const startAt of unique) {
-      const shift = await tx.shift.create({ data: { ownerId, startAt, name: normalizedName } });
+      const shift = await tx.shift.create({ data: { ownerId, startAt, name: normalizedName, cycleGroupId: cycleGroupId ?? null } });
       await tx.reminder.createMany({
         data: SHIFT_REMINDER_OFFSETS.map((offsetMinutes) => ({
           ownerId,
@@ -90,6 +90,13 @@ export async function deleteShift(ownerId: number, shiftId: number) {
   if (!shift || shift.startAt <= new Date()) return false;
   await prisma.shift.delete({ where: { id: shiftId } });
   return true;
+}
+
+export async function deleteShiftGroup(ownerId: number, cycleGroupId: string) {
+  const result = await prisma.shift.deleteMany({
+    where: { ownerId, cycleGroupId, startAt: { gt: new Date() } },
+  });
+  return result.count;
 }
 
 export async function updateShift(ownerId: number, shiftId: number, startAt: Date, timezone: string, name?: string | null) {
