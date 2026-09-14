@@ -48,6 +48,7 @@ enum ReminderStatus {
 model Reminder {
   id      Int    @id @default(autoincrement())
   text    String
+  voiceFileId String?
   dueAt   DateTime
   status  ReminderStatus @default(PENDING)
 
