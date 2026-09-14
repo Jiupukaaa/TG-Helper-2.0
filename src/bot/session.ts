@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { SessionStep, type User } from "@prisma/client";
 
-export type ReminderDraft = { text?: string };
+export type ReminderDraft = { text?: string; voiceFileId?: string };
 export type NoteEditDraft = { noteId?: number };
 export type ShiftDraft = { dates?: string[]; calendarMonth?: string; time?: string; workDays?: number; offDays?: number; firstDate?: string; editShiftId?: number; pendingStarts?: string[] };
 export type SessionDraft = ReminderDraft & NoteEditDraft & ShiftDraft;
