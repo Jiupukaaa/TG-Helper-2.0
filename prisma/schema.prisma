@@ -71,17 +71,19 @@ model Reminder {
 }
 
 model Shift {
-  id        Int        @id @default(autoincrement())
-  name      String?
-  startAt  DateTime
-  ownerId  Int
-  owner    User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  reminders Reminder[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id              Int        @id @default(autoincrement())
+  name            String?
+  startAt         DateTime
+  ownerId         Int
+  owner           User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  cycleGroupId    String?
+  reminders       Reminder[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   @@unique([ownerId, startAt])
   @@index([ownerId, startAt])
+  @@index([ownerId, cycleGroupId])
   @@map("shifts")
 }
 
