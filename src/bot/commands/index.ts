@@ -1,7 +1,7 @@
 import { Bot } from "grammy";
 import { authMiddleware } from "@/bot/middleware/auth";
 import { getOrCreateUser, clearSession, getSession } from "@/bot/session";
-import { mainMenuKeyboard } from "@/bot/keyboards";
+import { mainMenuKeyboard, noteItemKeyboard } from "@/bot/keyboards";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { createVoiceNote, listNotes } from "@/services/notesService";
 import { notesComposer, handleNotesTextInput, handleNotesVoiceInput } from "./notes";
@@ -56,7 +56,9 @@ export function registerHandlers(bot: Bot): void {
     const note = await createVoiceNote(user.id, voiceFileId);
     const notes = await listNotes(user.id);
     const noteNumber = notes.findIndex((item) => item.id === note.id) + 1;
-    await ctx.reply(`✅ Голосовая заметка #${noteNumber} сохранена.`);
+    await ctx.reply(`📝 Заметка #${noteNumber}\n\n🎙️ Голосовое сообщение`, {
+      reply_markup: noteItemKeyboard(note.id, true),
+    });
   });
 
   bot.on("message", async (ctx, next) => {
