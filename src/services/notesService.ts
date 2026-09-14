@@ -32,7 +32,7 @@ export async function createVoiceNote(ownerId: number, voiceFileId: string) {
 export async function listNotes(ownerId: number) {
   return prisma.note.findMany({
     where: { ownerId },
-    orderBy: { updatedAt: "desc" },
+    orderBy: { id: "asc" },
   });
 }
 
