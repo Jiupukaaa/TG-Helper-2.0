@@ -14,6 +14,7 @@ import {
   noteItemKeyboard,
   notePaginationKeyboard,
   notesListKeyboard,
+  notesPaginationKeyboard,
   notesDeleteSelectionKeyboard,
   cancelKeyboard,
   confirmDeleteKeyboard,
@@ -21,6 +22,10 @@ import {
 import { paginateNoteText } from "@/lib/notePagination";
 
 export const notesComposer = new Composer();
+
+const NOTES_LIST_PAGE_SIZE = 3500;
+
+type NoteListItem = { id: number; text: string };
 
 function getNoteNumber(notes: Array<{ id: number }>, noteId: number): number | null {
   const index = notes.findIndex((note) => note.id === noteId);
@@ -33,31 +38,101 @@ function notePageText(noteNumber: number, page: string, pageNumber: number, tota
     : `📝 Заметка #${noteNumber}\n\n${page}\n\n📄 Страница ${pageNumber} из ${totalPages}`;
 }
 
-async function getNotesListText(userId: number): Promise<string> {
+function buildNotesListPages(notes: NoteListItem[]): string[] {
+  if (notes.length === 0) return [];
+
+  const pages: string[] = [];
+  let currentNotes: string[] = [];
+  let currentLength = "📋 Ваши заметки:\n\n".length;
+
+  for (const [index, note] of notes.entries()) {
+    const noteText = `#${index + 1} — ${note.text}`;
+    const separatorLength = currentNotes.length === 0 ? 0 : 2;
+    const nextLength = currentLength + separatorLength + noteText.length;
+
+    if (currentNotes.length > 0 && nextLength > NOTES_LIST_PAGE_SIZE) {
+      pages.push(`📋 Ваши заметки:\n\n${currentNotes.join("\n\n")}`);
+      currentNotes = [];
+      currentLength = "📋 Ваши заметки:\n\n".length;
+    }
+
+    currentNotes.push(noteText);
+    currentLength += (currentNotes.length === 1 ? 0 : 2) + noteText.length;
+  }
+
+  if (currentNotes.length > 0) {
+    pages.push(`📋 Ваши заметки:\n\n${currentNotes.join("\n\n")}`);
+  }
+
+  return pages;
+}
+
+function notesListPageKeyboard(page: number, totalPages: number) {
+  return notesPaginationKeyboard(page, totalPages);
+}
+
+async function getNotesListPage(userId: number, page: number): Promise<{ text: string; page: number; totalPages: number }> {
   const notes = await listNotes(userId);
 
   if (notes.length === 0) {
-    return "📝 У вас пока нет заметок. Добавьте первую заметку:";
+    return { text: "📝 У вас пока нет заметок. Добавьте первую заметку:", page: 0, totalPages: 1 };
   }
 
-  const lines = notes
-    .map((n, index) => `#${index + 1} — ${n.text.length > 60 ? n.text.slice(0, 60) + "…" : n.text}`)
-    .join("\n");
+  const pages = buildNotesListPages(notes);
+  const safePage = Math.min(Math.max(page, 0), pages.length - 1);
+  return { text: pages[safePage]!, page: safePage, totalPages: pages.length };
+}
 
-  return `📋 Ваши заметки:\n\n${lines}\n\nВыберите действие:`;
+async function showNotesList(ctx: any, userId: number, page = 0) {
+  const result = await getNotesListPage(userId, page);
+  const replyMarkup = result.totalPages > 1
+    ? notesListPageKeyboard(result.page, result.totalPages)
+    : notesListKeyboard;
+  await ctx.editMessageText(`${result.text}${result.totalPages > 1 ? `\n\n📄 Страница ${result.page + 1} из ${result.totalPages}` : ""}`, {
+    reply_markup: replyMarkup,
+  });
 }
 
 notesComposer.command("notes", async (ctx) => {
   const user = await getOrCreateUser(BigInt(ctx.from!.id));
-  const text = await getNotesListText(user.id);
-  await ctx.reply(text, { reply_markup: notesListKeyboard });
+  const result = await getNotesListPage(user.id, 0);
+  const replyMarkup = result.totalPages > 1
+    ? notesListPageKeyboard(0, result.totalPages)
+    : notesListKeyboard;
+  await ctx.reply(`${result.text}${result.totalPages > 1 ? `\n\n📄 Страница 1 из ${result.totalPages}` : ""}`, {
+    reply_markup: replyMarkup,
+  });
 });
 
 notesComposer.callbackQuery("menu:notes", async (ctx) => {
   await ctx.answerCallbackQuery();
   const user = await getOrCreateUser(BigInt(ctx.from.id));
-  const text = await getNotesListText(user.id);
-  await ctx.editMessageText(text, { reply_markup: notesListKeyboard });
+  const result = await getNotesListPage(user.id, 0);
+  const replyMarkup = result.totalPages > 1
+    ? notesListPageKeyboard(0, result.totalPages)
+    : notesListKeyboard;
+  await ctx.editMessageText(`${result.text}${result.totalPages > 1 ? `\n\n📄 Страница 1 из ${result.totalPages}` : ""}`, {
+    reply_markup: replyMarkup,
+  });
+});
+
+notesComposer.callbackQuery(/^notes:list_page:(\d+)$/, async (ctx) => {
+  const page = Number(ctx.match[1]);
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const result = await getNotesListPage(user.id, page);
+
+  if (page !== result.page) {
+    await ctx.answerCallbackQuery("Страница не найдена.");
+    return;
+  }
+
+  await ctx.answerCallbackQuery();
+  const replyMarkup = result.totalPages > 1
+    ? notesListPageKeyboard(result.page, result.totalPages)
+    : notesListKeyboard;
+  await ctx.editMessageText(`${result.text}${result.totalPages > 1 ? `\n\n📄 Страница ${result.page + 1} из ${result.totalPages}` : ""}`, {
+    reply_markup: replyMarkup,
+  });
 });
 
 notesComposer.callbackQuery("notes:new", async (ctx) => {
@@ -70,8 +145,7 @@ notesComposer.callbackQuery("notes:new", async (ctx) => {
 notesComposer.callbackQuery("notes:list", async (ctx) => {
   await ctx.answerCallbackQuery();
   const user = await getOrCreateUser(BigInt(ctx.from.id));
-  const text = await getNotesListText(user.id);
-  await ctx.editMessageText(text, { reply_markup: notesListKeyboard });
+  await showNotesList(ctx, user.id, 0);
 });
 
 notesComposer.callbackQuery("notes:delete_mode", async (ctx) => {
