@@ -62,15 +62,21 @@ export function remindersDeleteSelectionKeyboard(reminderIds: number[]): InlineK
   return keyboard;
 }
 
-export function noteItemKeyboard(noteId: number): InlineKeyboard {
-  return new InlineKeyboard().text("✏️ Изменить", `notes:edit:${noteId}`).row().text("⬅️ К списку", "notes:list");
+export function noteItemKeyboard(noteId: number, isVoice = false): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  keyboard.text("✏️ Изменить", `notes:edit:${noteId}`);
+  if (isVoice) keyboard.row().text("🎙️ Отправить голосовое", `notes:voice:${noteId}`);
+  keyboard.row().text("⬅️ К списку", "notes:list");
+  return keyboard;
 }
 
-export function notePaginationKeyboard(noteId: number, page: number, totalPages: number): InlineKeyboard {
+export function notePaginationKeyboard(noteId: number, page: number, totalPages: number, isVoice = false): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   if (page > 0) keyboard.text("⬅️", `notes:page:${noteId}:${page - 1}`);
   if (page < totalPages - 1) keyboard.text("➡️", `notes:page:${noteId}:${page + 1}`);
-  keyboard.row().text("✏️ Изменить", `notes:edit:${noteId}`).row().text("⬅️ К списку", "notes:list");
+  keyboard.row().text("✏️ Изменить", `notes:edit:${noteId}`);
+  if (isVoice) keyboard.row().text("🎙️ Отправить голосовое", `notes:voice:${noteId}`);
+  keyboard.row().text("⬅️ К списку", "notes:list");
   return keyboard;
 }
 
