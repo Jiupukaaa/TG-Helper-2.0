@@ -29,7 +29,7 @@ const BIG_NOTE_THRESHOLD = 300;
 type NoteListItem = { id: number; text: string };
 
 function isBigNote(text: string): boolean {
-  return text.length > BIG_NOTE_THRESHOLD;
+  return text.length >= BIG_NOTE_THRESHOLD;
 }
 
 function getNoteNumber(notes: Array<{ id: number }>, noteId: number): number | null {
@@ -50,33 +50,37 @@ function buildNotesListPages(notes: NoteListItem[]): string[] {
   let currentNotes: string[] = [];
   let currentLength = "📋 Ваши заметки:\n\n".length;
 
+  const pushCurrentPage = () => {
+    if (currentNotes.length > 0) {
+      pages.push(`📋 Ваши заметки:\n\n${currentNotes.join("\n\n")}`);
+      currentNotes = [];
+      currentLength = "📋 Ваши заметки:\n\n".length;
+    }
+  };
+
   for (const [index, note] of notes.entries()) {
     const big = isBigNote(note.text);
     const noteText = `#${index + 1} — ${note.text}`;
+
+    // Большая заметка (300+ символов) всегда занимает отдельную страницу.
+    if (big) {
+      pushCurrentPage();
+      pages.push(`📋 Ваши заметки:\n\n${noteText}`);
+      continue;
+    }
+
     const separatorLength = currentNotes.length === 0 ? 0 : 2;
     const nextLength = currentLength + separatorLength + noteText.length;
 
-    // Большая заметка (>300 символов) всегда остаётся целиком.
-    // Порог не означает отдельную страницу: заметка переносится только
-    // если целиком не помещается на текущей странице.
-    if (big && currentNotes.length > 0 && nextLength > NOTES_LIST_PAGE_SIZE) {
-      pages.push(`📋 Ваши заметки:\n\n${currentNotes.join("\n\n")}`);
-      currentNotes = [];
-      currentLength = "📋 Ваши заметки:\n\n".length;
-    } else if (!big && currentNotes.length > 0 && nextLength > NOTES_LIST_PAGE_SIZE) {
-      pages.push(`📋 Ваши заметки:\n\n${currentNotes.join("\n\n")}`);
-      currentNotes = [];
-      currentLength = "📋 Ваши заметки:\n\n".length;
+    if (currentNotes.length > 0 && nextLength > NOTES_LIST_PAGE_SIZE) {
+      pushCurrentPage();
     }
 
     currentNotes.push(noteText);
     currentLength += (currentNotes.length === 1 ? 0 : 2) + noteText.length;
   }
 
-  if (currentNotes.length > 0) {
-    pages.push(`📋 Ваши заметки:\n\n${currentNotes.join("\n\n")}`);
-  }
-
+  pushCurrentPage();
   return pages;
 }
 
