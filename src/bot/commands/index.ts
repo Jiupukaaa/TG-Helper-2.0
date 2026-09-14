@@ -1,9 +1,10 @@
 import { Bot } from "grammy";
 import { authMiddleware } from "@/bot/middleware/auth";
-import { getOrCreateUser, clearSession } from "@/bot/session";
+import { getOrCreateUser, clearSession, getSession } from "@/bot/session";
 import { mainMenuKeyboard } from "@/bot/keyboards";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
-import { notesComposer, handleNotesTextInput } from "./notes";
+import { createVoiceNote } from "@/services/notesService";
+import { notesComposer, handleNotesTextInput, handleNotesVoiceInput } from "./notes";
 import { remindersComposer, handleReminderTextInput } from "./reminders";
 import { shiftsComposer, handleShiftTextInput } from "./shifts";
 
@@ -38,6 +39,21 @@ export function registerHandlers(bot: Bot): void {
     if (await handleReminderTextInput(ctx, user.id)) return;
     if (await handleShiftTextInput(ctx, user.id)) return;
     await ctx.reply("Не понимаю это сообщение. Используйте меню или /notes, /reminders, /shifts.");
+  });
+
+  bot.on("message:voice", async (ctx) => {
+    const user = await getOrCreateUser(BigInt(ctx.from!.id));
+    if (await handleNotesVoiceInput(ctx, user.id)) return;
+
+    const session = await getSession(user.id);
+    if (session && session.step !== "IDLE") {
+      await ctx.reply("Сейчас бот ожидает другой тип сообщения. Завершите текущий сценарий или отмените его.");
+      return;
+    }
+
+    const voiceFileId = ctx.message.voice.file_id;
+    const note = await createVoiceNote(user.id, voiceFileId);
+    await ctx.reply(`✅ Голосовая заметка #${note.id} сохранена.`);
   });
 
   bot.on("message", async (ctx, next) => {
