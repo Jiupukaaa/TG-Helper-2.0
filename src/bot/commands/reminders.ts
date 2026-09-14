@@ -24,13 +24,30 @@ function getReminderNumber(reminders: Array<{ id: number }>, reminderId: number)
   return index === -1 ? null : index + 1;
 }
 
+async function showRemindersList(ctx: any, userId: number, timezone: string, mode: "reply" | "edit") {
+  const reminders = await listReminders(userId);
+  const text = reminders.length === 0
+    ? "⏰ У вас пока нет активных напоминаний. Добавьте первое напоминание:"
+    : `📋 Ваши напоминания:\n\n${reminders
+        .map((reminder, index) => `#${index + 1} — ${formatLocalDateTime(reminder.dueAt, timezone)} — ${reminder.text}`)
+        .join("\n")}\n\nВыберите действие:`;
+
+  if (mode === "reply") {
+    await ctx.reply(text, { reply_markup: remindersListKeyboard });
+  } else {
+    await ctx.editMessageText(text, { reply_markup: remindersListKeyboard });
+  }
+}
+
 remindersComposer.command("reminders", async (ctx) => {
-  await ctx.reply("⏰ Напоминания:", { reply_markup: remindersMenuKeyboard });
+  const user = await getOrCreateUser(BigInt(ctx.from!.id));
+  await showRemindersList(ctx, user.id, user.timezone, "reply");
 });
 
 remindersComposer.callbackQuery("menu:reminders", async (ctx) => {
   await ctx.answerCallbackQuery();
-  await ctx.editMessageText("⏰ Напоминания:", { reply_markup: remindersMenuKeyboard });
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  await showRemindersList(ctx, user.id, user.timezone, "edit");
 });
 
 remindersComposer.command("settimezone", async (ctx) => {
@@ -69,22 +86,7 @@ remindersComposer.callbackQuery("reminders:new", async (ctx) => {
 remindersComposer.callbackQuery("reminders:list", async (ctx) => {
   await ctx.answerCallbackQuery();
   const user = await getOrCreateUser(BigInt(ctx.from.id));
-  const reminders = await listReminders(user.id);
-
-  if (reminders.length === 0) {
-    await ctx.editMessageText("У вас пока нет активных напоминаний.", {
-      reply_markup: remindersMenuKeyboard,
-    });
-    return;
-  }
-
-  const lines = reminders
-    .map((r, index) => `#${index + 1} — ${formatLocalDateTime(r.dueAt, user.timezone)} — ${r.text}`)
-    .join("\n");
-
-  await ctx.editMessageText(`📋 Ваши напоминания:\n\n${lines}\n\nВыберите действие:`, {
-    reply_markup: remindersListKeyboard,
-  });
+  await showRemindersList(ctx, user.id, user.timezone, "edit");
 });
 
 remindersComposer.callbackQuery("reminders:delete_mode", async (ctx) => {
@@ -93,8 +95,8 @@ remindersComposer.callbackQuery("reminders:delete_mode", async (ctx) => {
   const reminders = await listReminders(user.id);
 
   if (reminders.length === 0) {
-    await ctx.editMessageText("У вас пока нет активных напоминаний.", {
-      reply_markup: remindersMenuKeyboard,
+    await ctx.editMessageText("⏰ У вас пока нет активных напоминаний. Добавьте первое напоминание:", {
+      reply_markup: remindersListKeyboard,
     });
     return;
   }
