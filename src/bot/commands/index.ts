@@ -5,7 +5,7 @@ import { mainMenuKeyboard } from "@/bot/keyboards";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { createVoiceNote, listNotes } from "@/services/notesService";
 import { notesComposer, handleNotesTextInput, handleNotesVoiceInput } from "./notes";
-import { remindersComposer, handleReminderTextInput } from "./reminders";
+import { remindersComposer, handleReminderTextInput, handleReminderVoiceInput } from "./reminders";
 import { shiftsComposer, handleShiftTextInput } from "./shifts";
 
 export function registerHandlers(bot: Bot): void {
@@ -44,6 +44,7 @@ export function registerHandlers(bot: Bot): void {
   bot.on("message:voice", async (ctx) => {
     const user = await getOrCreateUser(BigInt(ctx.from!.id));
     if (await handleNotesVoiceInput(ctx, user.id)) return;
+    if (await handleReminderVoiceInput(ctx, user.id)) return;
 
     const session = await getSession(user.id);
     if (session && session.step !== "IDLE") {
