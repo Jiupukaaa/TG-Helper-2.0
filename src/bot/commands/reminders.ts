@@ -19,6 +19,11 @@ import {
 
 export const remindersComposer = new Composer();
 
+function getReminderNumber(reminders: Array<{ id: number }>, reminderId: number): number | null {
+  const index = reminders.findIndex((reminder) => reminder.id === reminderId);
+  return index === -1 ? null : index + 1;
+}
+
 remindersComposer.command("reminders", async (ctx) => {
   await ctx.reply("⏰ Напоминания:", { reply_markup: remindersMenuKeyboard });
 });
@@ -74,7 +79,7 @@ remindersComposer.callbackQuery("reminders:list", async (ctx) => {
   }
 
   const lines = reminders
-    .map((r) => `#${r.id} — ${formatLocalDateTime(r.dueAt, user.timezone)} — ${r.text}`)
+    .map((r, index) => `#${index + 1} — ${formatLocalDateTime(r.dueAt, user.timezone)} — ${r.text}`)
     .join("\n");
 
   await ctx.editMessageText(`📋 Ваши напоминания:\n\n${lines}\n\nВыберите действие:`, {
@@ -95,7 +100,7 @@ remindersComposer.callbackQuery("reminders:delete_mode", async (ctx) => {
   }
 
   const lines = reminders
-    .map((reminder) => `#${reminder.id} — ${formatLocalDateTime(reminder.dueAt, user.timezone)} — ${reminder.text}`)
+    .map((reminder, index) => `#${index + 1} — ${formatLocalDateTime(reminder.dueAt, user.timezone)} — ${reminder.text}`)
     .join("\n");
 
   await ctx.editMessageText(`🗑 Выберите номер напоминания для удаления:\n\n${lines}`, {
@@ -116,21 +121,37 @@ remindersComposer.callbackQuery(/^reminders:delete_select:(\d+)$/, async (ctx) =
     return;
   }
 
-  await ctx.editMessageText(`Удалить напоминание #${id}?`, {
+  const reminders = await listReminders(user.id);
+  const reminderNumber = getReminderNumber(reminders, id);
+  if (reminderNumber === null) {
+    await ctx.editMessageText("Напоминание не найдено или уже удалено/отправлено.", {
+      reply_markup: remindersMenuKeyboard,
+    });
+    return;
+  }
+
+  await ctx.editMessageText(`Удалить напоминание #${reminderNumber}?`, {
     reply_markup: confirmDeleteKeyboard("reminder", id),
   });
 });
 
 remindersComposer.command("cancelreminder", async (ctx) => {
   const arg = ctx.match?.toString().trim();
-  const id = Number(arg);
-  if (!arg || Number.isNaN(id)) {
+  const reminderNumber = Number(arg);
+  if (!arg || Number.isNaN(reminderNumber) || !Number.isInteger(reminderNumber) || reminderNumber < 1) {
     await ctx.reply("Использование: /cancelreminder <номер>");
     return;
   }
 
   const user = await getOrCreateUser(BigInt(ctx.from!.id));
-  const deleted = await deleteReminder(user.id, id);
+  const reminders = await listReminders(user.id);
+  const reminder = reminders[reminderNumber - 1];
+  if (!reminder) {
+    await ctx.reply("Напоминание не найдено.", { reply_markup: remindersMenuKeyboard });
+    return;
+  }
+
+  const deleted = await deleteReminder(user.id, reminder.id);
   await ctx.reply(deleted ? "🗑 Напоминание удалено." : "Напоминание не найдено.", {
     reply_markup: remindersMenuKeyboard,
   });
@@ -194,9 +215,11 @@ export async function handleReminderTextInput(ctx: any, userId: number): Promise
         throw new ValidationError("Неверный формат даты и времени. Используйте DD.MM.YYYY HH:mm.");
       }
       const reminder = await createReminder(userId, draft.text, dueAt);
+      const reminders = await listReminders(userId);
+      const reminderNumber = getReminderNumber(reminders, reminder.id) ?? 1;
       await clearSession(userId);
       await ctx.reply(
-        `✅ Напоминание #${reminder.id} создано на ${formatLocalDateTime(reminder.dueAt, user.timezone)}.`,
+        `✅ Напоминание #${reminderNumber} создано на ${formatLocalDateTime(reminder.dueAt, user.timezone)}.`,
         { reply_markup: remindersMenuKeyboard }
       );
     } catch (err) {
