@@ -12,17 +12,25 @@ import {
 import {
   notesMenuKeyboard,
   noteItemKeyboard,
+  notePaginationKeyboard,
   notesListKeyboard,
   notesDeleteSelectionKeyboard,
   cancelKeyboard,
   confirmDeleteKeyboard,
 } from "@/bot/keyboards";
+import { paginateNoteText } from "@/lib/notePagination";
 
 export const notesComposer = new Composer();
 
 function getNoteNumber(notes: Array<{ id: number }>, noteId: number): number | null {
   const index = notes.findIndex((note) => note.id === noteId);
   return index === -1 ? null : index + 1;
+}
+
+function notePageText(noteNumber: number, page: string, pageNumber: number, totalPages: number): string {
+  return totalPages === 1
+    ? `📝 Заметка #${noteNumber}\n\n${page}`
+    : `📝 Заметка #${noteNumber}\n\n${page}\n\n📄 Страница ${pageNumber} из ${totalPages}`;
 }
 
 async function getNotesListText(userId: number): Promise<string> {
@@ -128,8 +136,39 @@ notesComposer.command("note", async (ctx) => {
     return;
   }
 
-  await ctx.reply(`📝 Заметка #${noteNumber}\n\n${note.text}`, {
-    reply_markup: noteItemKeyboard(note.id),
+  const pages = paginateNoteText(note.text);
+  await ctx.reply(notePageText(noteNumber, pages[0], 1, pages.length), {
+    reply_markup: pages.length === 1 ? noteItemKeyboard(note.id) : notePaginationKeyboard(note.id, 0, pages.length),
+  });
+});
+
+notesComposer.callbackQuery(/^notes:page:(\d+):(\d+)$/, async (ctx) => {
+  const noteId = Number(ctx.match[1]);
+  const pageNumber = Number(ctx.match[2]);
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const note = await getOwnedNote(user.id, noteId);
+
+  if (!note) {
+    await ctx.answerCallbackQuery("Заметка не найдена.");
+    return;
+  }
+
+  const pages = paginateNoteText(note.text);
+  if (!Number.isInteger(pageNumber) || pageNumber < 0 || pageNumber >= pages.length) {
+    await ctx.answerCallbackQuery("Страница не найдена.");
+    return;
+  }
+
+  const notes = await listNotes(user.id);
+  const noteNumber = getNoteNumber(notes, note.id);
+  if (noteNumber === null) {
+    await ctx.answerCallbackQuery("Заметка не найдена.");
+    return;
+  }
+
+  await ctx.answerCallbackQuery();
+  await ctx.editMessageText(notePageText(noteNumber, pages[pageNumber], pageNumber + 1, pages.length), {
+    reply_markup: notePaginationKeyboard(note.id, pageNumber, pages.length),
   });
 });
 
