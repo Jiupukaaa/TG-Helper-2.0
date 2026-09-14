@@ -20,6 +20,46 @@ export const remindersMenuKeyboard = new InlineKeyboard()
   .row()
   .text("⬅️ В главное меню", "menu:main");
 
+export function notesListKeyboardWithVoiceActions(voiceNotes: Array<{ id: number; number: number }>): InlineKeyboard {
+  const keyboard = new InlineKeyboard()
+    .text("➕ Новая заметка", "notes:new");
+
+  for (const note of voiceNotes) {
+    keyboard.row().text(`🎙️ Отправить голосовое #${note.number}`, `notes:voice:${note.id}`);
+  }
+
+  keyboard
+    .row()
+    .text("🗑 Удалить", "notes:delete_mode")
+    .row()
+    .text("⬅️ К главному меню", "menu:main");
+
+  return keyboard;
+}
+
+export function notesPaginationKeyboardWithVoiceActions(
+  page: number,
+  totalPages: number,
+  voiceNotes: Array<{ id: number; number: number }>,
+): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  if (page > 0) keyboard.text("⬅️", `notes:list_page:${page - 1}`);
+  if (page < totalPages - 1) keyboard.text("➡️", `notes:list_page:${page + 1}`);
+
+  for (const note of voiceNotes) {
+    keyboard.row().text(`🎙️ Отправить голосовое #${note.number}`, `notes:voice:${note.id}`);
+  }
+
+  keyboard
+    .row()
+    .text("➕ Новая заметка", "notes:new")
+    .row()
+    .text("🗑 Удалить", "notes:delete_mode")
+    .row()
+    .text("⬅️ К главному меню", "menu:main");
+  return keyboard;
+}
+
 export const notesListKeyboard = new InlineKeyboard()
   .text("➕ Новая заметка", "notes:new")
   .row()
