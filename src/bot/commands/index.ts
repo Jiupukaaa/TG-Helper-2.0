@@ -4,7 +4,7 @@ import { authMiddleware } from "@/bot/middleware/auth";
 import { getOrCreateUser, clearSession, getSession, setSessionStep } from "@/bot/session";
 import { mainMenuKeyboard, voiceNoteSavedKeyboard, cancelKeyboard } from "@/bot/keyboards";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
-import { createVoiceNote, listNotes, replaceVoiceNote } from "@/services/notesService";
+import { createVoiceNote, getOwnedNote, listNotes, replaceVoiceNote } from "@/services/notesService";
 import { notesComposer, handleNotesTextInput, handleNotesVoiceInput } from "./notes";
 import { remindersComposer, handleReminderTextInput, handleReminderVoiceInput } from "./reminders";
 import { shiftsComposer, handleShiftTextInput } from "./shifts";
@@ -34,7 +34,7 @@ export function registerHandlers(bot: Bot): void {
     await ctx.answerCallbackQuery();
     const noteId = Number(ctx.match[1]);
     const user = await getOrCreateUser(BigInt(ctx.from.id));
-    const note = await import("@/services/notesService").then(({ getOwnedNote }) => getOwnedNote(user.id, noteId));
+    const note = await getOwnedNote(user.id, noteId);
     if (!note?.voiceFileId) {
       await ctx.editMessageText("Голосовая заметка не найдена.");
       return;
