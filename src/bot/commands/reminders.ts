@@ -8,6 +8,7 @@ import {
   getOwnedReminder,
   ValidationError,
 } from "@/services/remindersService";
+import { VOICE_NOTE_TEXT } from "@/services/notesService";
 import { parseLocalDateTime, formatLocalDateTime, DEFAULT_TIMEZONE, isValidTimezone } from "@/lib/time";
 import {
   remindersMenuKeyboard,
@@ -29,14 +30,11 @@ async function showRemindersList(ctx: any, userId: number, timezone: string, mod
   const text = reminders.length === 0
     ? "⏰ У вас пока нет активных напоминаний. Добавьте первое напоминание:"
     : `📋 Ваши напоминания:\n\n${reminders
-        .map((reminder, index) => `#${index + 1} — ${formatLocalDateTime(reminder.dueAt, timezone)} — ${reminder.text}`)
+        .map((reminder, index) => `#${index + 1} — ${formatLocalDateTime(reminder.dueAt, timezone)} — ${reminder.voiceFileId ? "🎙️ Голосовое сообщение" : reminder.text}`)
         .join("\n")}\n\nВыберите действие:`;
 
-  if (mode === "reply") {
-    await ctx.reply(text, { reply_markup: remindersListKeyboard });
-  } else {
-    await ctx.editMessageText(text, { reply_markup: remindersListKeyboard });
-  }
+  if (mode === "reply") await ctx.reply(text, { reply_markup: remindersListKeyboard });
+  else await ctx.editMessageText(text, { reply_markup: remindersListKeyboard });
 }
 
 remindersComposer.command("reminders", async (ctx) => {
@@ -53,9 +51,7 @@ remindersComposer.callbackQuery("menu:reminders", async (ctx) => {
 remindersComposer.command("settimezone", async (ctx) => {
   const tz = ctx.match?.toString().trim();
   if (!tz) {
-    await ctx.reply(
-      "Использование: /settimezone <IANA-название зоны>\nНапример: /settimezone Europe/Amsterdam"
-    );
+    await ctx.reply("Использование: /settimezone <IANA-название зоны>\nНапример: /settimezone Europe/Amsterdam");
     return;
   }
   if (!isValidTimezone(tz)) {
@@ -73,14 +69,12 @@ remindersComposer.callbackQuery("reminders:new", async (ctx) => {
   const user = await getOrCreateUser(BigInt(ctx.from.id));
 
   if (user.timezone === DEFAULT_TIMEZONE) {
-    await ctx.editMessageText(
-      "Сначала укажите ваш часовой пояс:\n/settimezone Europe/Amsterdam\n\nПотом снова нажмите ➕ Новое напоминание."
-    );
+    await ctx.editMessageText("Сначала укажите ваш часовой пояс:\n/settimezone Europe/Amsterdam\n\nПотом снова нажмите ➕ Новое напоминание.");
     return;
   }
 
   await setSessionStep(user.id, SessionStep.REMINDER_AWAITING_TEXT);
-  await ctx.editMessageText("Введите текст напоминания:", { reply_markup: cancelKeyboard });
+  await ctx.editMessageText("Введите текст напоминания или отправьте голосовое сообщение:", { reply_markup: cancelKeyboard });
 });
 
 remindersComposer.callbackQuery("reminders:list", async (ctx) => {
@@ -95,14 +89,12 @@ remindersComposer.callbackQuery("reminders:delete_mode", async (ctx) => {
   const reminders = await listReminders(user.id);
 
   if (reminders.length === 0) {
-    await ctx.editMessageText("⏰ У вас пока нет активных напоминаний. Добавьте первое напоминание:", {
-      reply_markup: remindersListKeyboard,
-    });
+    await ctx.editMessageText("⏰ У вас пока нет активных напоминаний. Добавьте первое напоминание:", { reply_markup: remindersListKeyboard });
     return;
   }
 
   const lines = reminders
-    .map((reminder, index) => `#${index + 1} — ${formatLocalDateTime(reminder.dueAt, user.timezone)} — ${reminder.text}`)
+    .map((reminder, index) => `#${index + 1} — ${formatLocalDateTime(reminder.dueAt, user.timezone)} — ${reminder.voiceFileId ? "🎙️ Голосовое сообщение" : reminder.text}`)
     .join("\n");
 
   await ctx.editMessageText(`🗑 Выберите номер напоминания для удаления:\n\n${lines}`, {
@@ -117,24 +109,18 @@ remindersComposer.callbackQuery(/^reminders:delete_select:(\d+)$/, async (ctx) =
   const reminder = await getOwnedReminder(user.id, id);
 
   if (!reminder) {
-    await ctx.editMessageText("Напоминание не найдено или уже удалено/отправлено.", {
-      reply_markup: remindersMenuKeyboard,
-    });
+    await ctx.editMessageText("Напоминание не найдено или уже удалено/отправлено.", { reply_markup: remindersMenuKeyboard });
     return;
   }
 
   const reminders = await listReminders(user.id);
   const reminderNumber = getReminderNumber(reminders, id);
   if (reminderNumber === null) {
-    await ctx.editMessageText("Напоминание не найдено или уже удалено/отправлено.", {
-      reply_markup: remindersMenuKeyboard,
-    });
+    await ctx.editMessageText("Напоминание не найдено или уже удалено/отправлено.", { reply_markup: remindersMenuKeyboard });
     return;
   }
 
-  await ctx.editMessageText(`Удалить напоминание #${reminderNumber}?`, {
-    reply_markup: confirmDeleteKeyboard("reminder", id),
-  });
+  await ctx.editMessageText(`Удалить напоминание #${reminderNumber}?`, { reply_markup: confirmDeleteKeyboard("reminder", id) });
 });
 
 remindersComposer.command("cancelreminder", async (ctx) => {
@@ -154,9 +140,7 @@ remindersComposer.command("cancelreminder", async (ctx) => {
   }
 
   const deleted = await deleteReminder(user.id, reminder.id);
-  await ctx.reply(deleted ? "🗑 Напоминание удалено." : "Напоминание не найдено.", {
-    reply_markup: remindersMenuKeyboard,
-  });
+  await ctx.reply(deleted ? "🗑 Напоминание удалено." : "Напоминание не найдено.", { reply_markup: remindersMenuKeyboard });
 });
 
 remindersComposer.callbackQuery(/^reminders:delete_confirm:(\d+)$/, async (ctx) => {
@@ -193,17 +177,14 @@ export async function handleReminderTextInput(ctx: any, userId: number): Promise
       await setSessionStep(userId, SessionStep.REMINDER_AWAITING_DATETIME, { text: trimmed });
       await ctx.reply("Введите дату и время в формате DD.MM.YYYY HH:mm:", { reply_markup: cancelKeyboard });
     } catch (err) {
-      if (err instanceof ValidationError) {
-        await ctx.reply(`⚠️ ${err.message}\nПопробуйте ещё раз:`, { reply_markup: cancelKeyboard });
-      } else {
-        throw err;
-      }
+      if (err instanceof ValidationError) await ctx.reply(`⚠️ ${err.message}\nПопробуйте ещё раз:`, { reply_markup: cancelKeyboard });
+      else throw err;
     }
     return true;
   }
 
   if (session.step === SessionStep.REMINDER_AWAITING_DATETIME) {
-    const draft = (session.draft as { text?: string } | null) ?? {};
+    const draft = (session.draft as { text?: string; voiceFileId?: string } | null) ?? {};
     if (!draft.text) {
       await clearSession(userId);
       await ctx.reply("Что-то пошло не так, начните заново через /reminders.");
@@ -213,28 +194,33 @@ export async function handleReminderTextInput(ctx: any, userId: number): Promise
     try {
       const user = await getOrCreateUser(BigInt(ctx.from!.id));
       const dueAt = parseLocalDateTime(text.trim(), user.timezone);
-      if (!dueAt) {
-        throw new ValidationError("Неверный формат даты и времени. Используйте DD.MM.YYYY HH:mm.");
-      }
-      const reminder = await createReminder(userId, draft.text, dueAt);
+      if (!dueAt) throw new ValidationError("Неверный формат даты и времени. Используйте DD.MM.YYYY HH:mm.");
+      const reminder = await createReminder(userId, draft.text, dueAt, draft.voiceFileId);
       const reminders = await listReminders(userId);
       const reminderNumber = getReminderNumber(reminders, reminder.id) ?? 1;
       await clearSession(userId);
-      await ctx.reply(
-        `✅ Напоминание #${reminderNumber} создано на ${formatLocalDateTime(reminder.dueAt, user.timezone)}.`,
-        { reply_markup: remindersMenuKeyboard }
-      );
+      await ctx.reply(`✅ Напоминание #${reminderNumber} создано на ${formatLocalDateTime(reminder.dueAt, user.timezone)}.`, { reply_markup: remindersMenuKeyboard });
     } catch (err) {
-      if (err instanceof ValidationError) {
-        await ctx.reply(`⚠️ ${err.message}\nВведите другую дату и время:`, {
-          reply_markup: cancelKeyboard,
-        });
-      } else {
-        throw err;
-      }
+      if (err instanceof ValidationError) await ctx.reply(`⚠️ ${err.message}\nВведите другую дату и время:`, { reply_markup: cancelKeyboard });
+      else throw err;
     }
     return true;
   }
 
   return false;
+}
+
+export async function handleReminderVoiceInput(ctx: any, userId: number): Promise<boolean> {
+  const session = await getSession(userId);
+  if (!session || session.step !== SessionStep.REMINDER_AWAITING_TEXT) return false;
+
+  const voiceFileId = ctx.message?.voice?.file_id as string | undefined;
+  if (!voiceFileId) return false;
+
+  await setSessionStep(userId, SessionStep.REMINDER_AWAITING_DATETIME, {
+    text: VOICE_NOTE_TEXT,
+    voiceFileId,
+  });
+  await ctx.reply("🎙️ Голосовое сохранено. Теперь введите дату и время в формате DD.MM.YYYY HH:mm:", { reply_markup: cancelKeyboard });
+  return true;
 }
