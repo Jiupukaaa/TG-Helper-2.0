@@ -19,9 +19,11 @@ export const remindersMenuKeyboard = new InlineKeyboard()
   .text("⬅️ Назад", "menu:main");
 
 export const notesListKeyboard = new InlineKeyboard()
+  .text("➕ Новая заметка", "notes:new")
+  .row()
   .text("🗑 Удалить", "notes:delete_mode")
   .row()
-  .text("⬅️ К меню заметок", "menu:notes");
+  .text("⬅️ К главному меню", "menu:main");
 
 export const remindersListKeyboard = new InlineKeyboard()
   .text("🗑 Удалить", "reminders:delete_mode")
