@@ -42,7 +42,7 @@ export function notesPaginationKeyboard(page: number, totalPages: number): Inlin
 export const remindersListKeyboard = new InlineKeyboard()
   .text("🗑 Удалить", "reminders:delete_mode")
   .row()
-  .text("⬅️ К меню напоминаний", "menu:reminders");
+  .text("⬅️ В главное меню", "menu:main");
 
 export function notesDeleteSelectionKeyboard(noteIds: number[]): InlineKeyboard {
   const keyboard = new InlineKeyboard();
