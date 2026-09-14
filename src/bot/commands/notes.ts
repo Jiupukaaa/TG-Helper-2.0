@@ -3,6 +3,7 @@ import { SessionStep } from "@prisma/client";
 import { getOrCreateUser, setSessionStep, clearSession, getSession } from "@/bot/session";
 import {
   createNote,
+  createVoiceNote,
   listNotes,
   getOwnedNote,
   updateNote,
@@ -26,7 +27,7 @@ export const notesComposer = new Composer();
 const NOTES_LIST_PAGE_SIZE = 3500;
 const BIG_NOTE_THRESHOLD = 300;
 
-type NoteListItem = { id: number; text: string };
+type NoteListItem = { id: number; text: string; voiceFileId: string | null };
 
 function isBigNote(text: string): boolean {
   return text.length >= BIG_NOTE_THRESHOLD;
@@ -59,10 +60,9 @@ function buildNotesListPages(notes: NoteListItem[]): string[] {
   };
 
   for (const [index, note] of notes.entries()) {
-    const big = isBigNote(note.text);
-    const noteText = `#${index + 1} — ${note.text}`;
+    const big = !note.voiceFileId && isBigNote(note.text);
+    const noteText = `#${index + 1} — ${note.voiceFileId ? "🎙️ Голосовое сообщение" : note.text}`;
 
-    // Большая заметка (300+ символов) всегда занимает отдельную страницу.
     if (big) {
       pushCurrentPage();
       pages.push(`📋 Ваши заметки:\n\n${noteText}`);
@@ -176,7 +176,7 @@ notesComposer.callbackQuery("notes:delete_mode", async (ctx) => {
   }
 
   const lines = notes
-    .map((note, index) => `#${index + 1} — ${note.text.length > 60 ? note.text.slice(0, 60) + "…" : note.text}`)
+    .map((note, index) => `#${index + 1} — ${note.voiceFileId ? "🎙️ Голосовое сообщение" : note.text.length > 60 ? note.text.slice(0, 60) + "…" : note.text}`)
     .join("\n");
 
   await ctx.editMessageText(`🗑 Выберите номер заметки для удаления:\n\n${lines}`, {
@@ -191,18 +191,14 @@ notesComposer.callbackQuery(/^notes:delete_select:(\d+)$/, async (ctx) => {
   const note = await getOwnedNote(user.id, noteId);
 
   if (!note) {
-    await ctx.editMessageText("Заметка не найдена или уже удалена.", {
-      reply_markup: notesMenuKeyboard,
-    });
+    await ctx.editMessageText("Заметка не найдена или уже удалена.", { reply_markup: notesMenuKeyboard });
     return;
   }
 
   const notes = await listNotes(user.id);
   const noteNumber = getNoteNumber(notes, noteId);
   if (noteNumber === null) {
-    await ctx.editMessageText("Заметка не найдена или уже удалена.", {
-      reply_markup: notesMenuKeyboard,
-    });
+    await ctx.editMessageText("Заметка не найдена или уже удалена.", { reply_markup: notesMenuKeyboard });
     return;
   }
 
@@ -227,10 +223,29 @@ notesComposer.command("note", async (ctx) => {
     return;
   }
 
+  if (note.voiceFileId) {
+    await ctx.reply(`📝 Заметка #${noteNumber}\n\n🎙️ Голосовое сообщение`, {
+      reply_markup: noteItemKeyboard(note.id, true),
+    });
+    return;
+  }
+
   const pages = paginateNoteText(note.text);
   await ctx.reply(notePageText(noteNumber, pages[0]!, 1, pages.length), {
     reply_markup: pages.length === 1 ? noteItemKeyboard(note.id) : notePaginationKeyboard(note.id, 0, pages.length),
   });
+});
+
+notesComposer.callbackQuery(/^notes:voice:(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const noteId = Number(ctx.match[1]);
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const note = await getOwnedNote(user.id, noteId);
+  if (!note?.voiceFileId) {
+    await ctx.reply("Голосовое сообщение не найдено.");
+    return;
+  }
+  await ctx.api.sendVoice(ctx.chat!.id, note.voiceFileId);
 });
 
 notesComposer.callbackQuery(/^notes:page:(\d+):(\d+)$/, async (ctx) => {
@@ -241,6 +256,11 @@ notesComposer.callbackQuery(/^notes:page:(\d+):(\d+)$/, async (ctx) => {
 
   if (!note) {
     await ctx.answerCallbackQuery("Заметка не найдена.");
+    return;
+  }
+
+  if (note.voiceFileId) {
+    await ctx.answerCallbackQuery("Голосовая заметка не имеет страниц.");
     return;
   }
 
@@ -313,11 +333,8 @@ export async function handleNotesTextInput(ctx: any, userId: number): Promise<bo
       const noteNumber = getNoteNumber(notes, note.id) ?? 1;
       await ctx.reply(`✅ Заметка #${noteNumber} сохранена.`, { reply_markup: notesMenuKeyboard });
     } catch (err) {
-      if (err instanceof ValidationError) {
-        await ctx.reply(`⚠️ ${err.message}\nПопробуйте ещё раз:`, { reply_markup: cancelKeyboard });
-      } else {
-        throw err;
-      }
+      if (err instanceof ValidationError) await ctx.reply(`⚠️ ${err.message}\nПопробуйте ещё раз:`, { reply_markup: cancelKeyboard });
+      else throw err;
     }
     return true;
   }
@@ -333,20 +350,38 @@ export async function handleNotesTextInput(ctx: any, userId: number): Promise<bo
     try {
       const updated = await updateNote(userId, noteId, text);
       await clearSession(userId);
-      if (!updated) {
-        await ctx.reply("Заметка не найдена.");
-      } else {
+      if (!updated) await ctx.reply("Заметка не найдена.");
+      else {
         const notes = await listNotes(userId);
         const noteNumber = getNoteNumber(notes, updated.id) ?? 1;
         await ctx.reply(`✅ Заметка #${noteNumber} обновлена.`, { reply_markup: notesMenuKeyboard });
       }
     } catch (err) {
-      if (err instanceof ValidationError) {
-        await ctx.reply(`⚠️ ${err.message}\nПопробуйте ещё раз:`, { reply_markup: cancelKeyboard });
-      } else {
-        throw err;
-      }
+      if (err instanceof ValidationError) await ctx.reply(`⚠️ ${err.message}\nПопробуйте ещё раз:`, { reply_markup: cancelKeyboard });
+      else throw err;
     }
+    return true;
+  }
+
+  return false;
+}
+
+export async function handleNotesVoiceInput(ctx: any, userId: number): Promise<boolean> {
+  const session = await getSession(userId);
+  const voiceFileId = ctx.message?.voice?.file_id as string | undefined;
+  if (!voiceFileId) return false;
+
+  if (session?.step === SessionStep.NOTE_AWAITING_TEXT) {
+    const note = await createVoiceNote(userId, voiceFileId);
+    await clearSession(userId);
+    const notes = await listNotes(userId);
+    const noteNumber = getNoteNumber(notes, note.id) ?? 1;
+    await ctx.reply(`✅ Голосовая заметка #${noteNumber} сохранена.`, { reply_markup: notesMenuKeyboard });
+    return true;
+  }
+
+  if (session?.step === SessionStep.NOTE_EDIT_AWAITING_TEXT) {
+    await ctx.reply("Голосовое сообщение нельзя использовать для изменения заметки. Введите новый текст или отмените действие.", { reply_markup: cancelKeyboard });
     return true;
   }
 
