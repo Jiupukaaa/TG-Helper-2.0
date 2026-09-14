@@ -9,9 +9,18 @@ export const dynamic = "force-dynamic";
 
 let handlersRegistered = false;
 
-function ensureHandlers() {
+async function ensureHandlers() {
   if (!handlersRegistered) {
-    registerHandlers(getBot());
+    const bot = getBot();
+    registerHandlers(bot);
+    await bot.api.setMyCommands([
+      { command: "start", description: "Запустить бота" },
+      { command: "notes", description: "Открыть заметки" },
+      { command: "note", description: "Открыть заметку по номеру" },
+      { command: "reminders", description: "Открыть напоминания" },
+      { command: "settimezone", description: "Установить часовой пояс" },
+      { command: "cancelreminder", description: "Удалить напоминание по номеру" },
+    ]);
     handlersRegistered = true;
   }
 }
@@ -25,7 +34,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  ensureHandlers();
+  await ensureHandlers();
   const bot = getBot();
   const handleUpdate = webhookCallback(bot, "std/http");
 
