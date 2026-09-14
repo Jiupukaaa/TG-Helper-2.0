@@ -3,7 +3,7 @@ import { SessionStep, type User } from "@prisma/client";
 
 export type ReminderDraft = { text?: string };
 export type NoteEditDraft = { noteId?: number };
-export type ShiftDraft = { dates?: string[]; calendarMonth?: string; time?: string; workDays?: number; offDays?: number; firstDate?: string; editShiftId?: number };
+export type ShiftDraft = { dates?: string[]; calendarMonth?: string; time?: string; workDays?: number; offDays?: number; firstDate?: string; editShiftId?: number; pendingStarts?: string[] };
 export type SessionDraft = ReminderDraft & NoteEditDraft & ShiftDraft;
 
 export async function getOrCreateUser(telegramId: bigint): Promise<User> {
