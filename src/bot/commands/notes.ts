@@ -24,8 +24,13 @@ import { paginateNoteText } from "@/lib/notePagination";
 export const notesComposer = new Composer();
 
 const NOTES_LIST_PAGE_SIZE = 3500;
+const BIG_NOTE_THRESHOLD = 300;
 
 type NoteListItem = { id: number; text: string };
+
+function isBigNote(text: string): boolean {
+  return text.length > BIG_NOTE_THRESHOLD;
+}
 
 function getNoteNumber(notes: Array<{ id: number }>, noteId: number): number | null {
   const index = notes.findIndex((note) => note.id === noteId);
@@ -46,11 +51,19 @@ function buildNotesListPages(notes: NoteListItem[]): string[] {
   let currentLength = "📋 Ваши заметки:\n\n".length;
 
   for (const [index, note] of notes.entries()) {
+    const big = isBigNote(note.text);
     const noteText = `#${index + 1} — ${note.text}`;
     const separatorLength = currentNotes.length === 0 ? 0 : 2;
     const nextLength = currentLength + separatorLength + noteText.length;
 
-    if (currentNotes.length > 0 && nextLength > NOTES_LIST_PAGE_SIZE) {
+    // Большая заметка (>300 символов) всегда остаётся целиком.
+    // Порог не означает отдельную страницу: заметка переносится только
+    // если целиком не помещается на текущей странице.
+    if (big && currentNotes.length > 0 && nextLength > NOTES_LIST_PAGE_SIZE) {
+      pages.push(`📋 Ваши заметки:\n\n${currentNotes.join("\n\n")}`);
+      currentNotes = [];
+      currentLength = "📋 Ваши заметки:\n\n".length;
+    } else if (!big && currentNotes.length > 0 && nextLength > NOTES_LIST_PAGE_SIZE) {
       pages.push(`📋 Ваши заметки:\n\n${currentNotes.join("\n\n")}`);
       currentNotes = [];
       currentLength = "📋 Ваши заметки:\n\n".length;
