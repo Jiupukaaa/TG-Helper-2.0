@@ -72,6 +72,7 @@ model Reminder {
 
 model Shift {
   id        Int        @id @default(autoincrement())
+  name      String?
   startAt  DateTime
   ownerId  Int
   owner    User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
@@ -91,11 +92,14 @@ enum SessionStep {
   REMINDER_AWAITING_TEXT
   REMINDER_AWAITING_DATETIME
   SHIFT_MANUAL_AWAITING_TIME
+  SHIFT_MANUAL_AWAITING_NAME
   SHIFT_CYCLE_AWAITING_WORK_DAYS
   SHIFT_CYCLE_AWAITING_OFF_DAYS
   SHIFT_CYCLE_AWAITING_START_DATE
   SHIFT_CYCLE_AWAITING_TIME
   SHIFT_CYCLE_AWAITING_END_DATE
+  SHIFT_CYCLE_AWAITING_NAME
+  SHIFT_EDIT_AWAITING_NAME
 }
 
 model Session {
