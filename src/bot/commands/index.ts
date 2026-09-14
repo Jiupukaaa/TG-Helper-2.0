@@ -3,7 +3,7 @@ import { authMiddleware } from "@/bot/middleware/auth";
 import { getOrCreateUser, clearSession, getSession } from "@/bot/session";
 import { mainMenuKeyboard } from "@/bot/keyboards";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
-import { createVoiceNote } from "@/services/notesService";
+import { createVoiceNote, listNotes } from "@/services/notesService";
 import { notesComposer, handleNotesTextInput, handleNotesVoiceInput } from "./notes";
 import { remindersComposer, handleReminderTextInput } from "./reminders";
 import { shiftsComposer, handleShiftTextInput } from "./shifts";
@@ -53,7 +53,9 @@ export function registerHandlers(bot: Bot): void {
 
     const voiceFileId = ctx.message.voice.file_id;
     const note = await createVoiceNote(user.id, voiceFileId);
-    await ctx.reply(`✅ Голосовая заметка #${note.id} сохранена.`);
+    const notes = await listNotes(user.id);
+    const noteNumber = notes.findIndex((item) => item.id === note.id) + 1;
+    await ctx.reply(`✅ Голосовая заметка #${noteNumber} сохранена.`);
   });
 
   bot.on("message", async (ctx, next) => {
