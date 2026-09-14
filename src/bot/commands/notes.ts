@@ -12,10 +12,10 @@ import {
 } from "@/services/notesService";
 import {
   notesMenuKeyboard,
-  noteItemKeyboard,
   notePaginationKeyboard,
   notesListKeyboard,
-  notesPaginationKeyboard,
+  notesListKeyboardWithVoiceActions,
+  notesPaginationKeyboardWithVoiceActions,
   notesDeleteSelectionKeyboard,
   cancelKeyboard,
   confirmDeleteKeyboard,
@@ -28,6 +28,8 @@ const NOTES_LIST_PAGE_SIZE = 3500;
 const BIG_NOTE_THRESHOLD = 300;
 
 type NoteListItem = { id: number; text: string; voiceFileId: string | null };
+type VoiceListAction = { id: number; number: number };
+type NotesListPage = { text: string; voiceNotes: VoiceListAction[] };
 
 function isBigNote(text: string): boolean {
   return text.length >= BIG_NOTE_THRESHOLD;
@@ -44,28 +46,37 @@ function notePageText(noteNumber: number, page: string, pageNumber: number, tota
     : `📝 Заметка #${noteNumber}\n\n${page}\n\n📄 Страница ${pageNumber} из ${totalPages}`;
 }
 
-function buildNotesListPages(notes: NoteListItem[]): string[] {
+function buildNotesListPages(notes: NoteListItem[]): NotesListPage[] {
   if (notes.length === 0) return [];
 
-  const pages: string[] = [];
+  const pages: NotesListPage[] = [];
   let currentNotes: string[] = [];
+  let currentVoiceNotes: VoiceListAction[] = [];
   let currentLength = "📋 Ваши заметки:\n\n".length;
 
   const pushCurrentPage = () => {
     if (currentNotes.length > 0) {
-      pages.push(`📋 Ваши заметки:\n\n${currentNotes.join("\n\n")}`);
+      pages.push({
+        text: `📋 Ваши заметки:\n\n${currentNotes.join("\n\n")}`,
+        voiceNotes: currentVoiceNotes,
+      });
       currentNotes = [];
+      currentVoiceNotes = [];
       currentLength = "📋 Ваши заметки:\n\n".length;
     }
   };
 
   for (const [index, note] of notes.entries()) {
+    const noteNumber = index + 1;
     const big = !note.voiceFileId && isBigNote(note.text);
-    const noteText = `#${index + 1} — ${note.voiceFileId ? "🎙️ Голосовое сообщение" : note.text}`;
+    const noteText = `#${noteNumber} — ${note.voiceFileId ? "🎙️ Голосовое сообщение" : note.text}`;
 
     if (big) {
       pushCurrentPage();
-      pages.push(`📋 Ваши заметки:\n\n${noteText}`);
+      pages.push({
+        text: `📋 Ваши заметки:\n\n${noteText}`,
+        voiceNotes: [],
+      });
       continue;
     }
 
@@ -77,6 +88,7 @@ function buildNotesListPages(notes: NoteListItem[]): string[] {
     }
 
     currentNotes.push(noteText);
+    if (note.voiceFileId) currentVoiceNotes.push({ id: note.id, number: noteNumber });
     currentLength += (currentNotes.length === 1 ? 0 : 2) + noteText.length;
   }
 
@@ -84,27 +96,28 @@ function buildNotesListPages(notes: NoteListItem[]): string[] {
   return pages;
 }
 
-function notesListPageKeyboard(page: number, totalPages: number) {
-  return notesPaginationKeyboard(page, totalPages);
-}
-
-async function getNotesListPage(userId: number, page: number): Promise<{ text: string; page: number; totalPages: number }> {
+async function getNotesListPage(userId: number, page: number): Promise<{ text: string; page: number; totalPages: number; voiceNotes: VoiceListAction[] }> {
   const notes = await listNotes(userId);
 
   if (notes.length === 0) {
-    return { text: "📝 У вас пока нет заметок. Добавьте первую заметку:", page: 0, totalPages: 1 };
+    return { text: "📝 У вас пока нет заметок. Добавьте первую заметку:", page: 0, totalPages: 1, voiceNotes: [] };
   }
 
   const pages = buildNotesListPages(notes);
   const safePage = Math.min(Math.max(page, 0), pages.length - 1);
-  return { text: pages[safePage]!, page: safePage, totalPages: pages.length };
+  const result = pages[safePage]!;
+  return { text: result.text, page: safePage, totalPages: pages.length, voiceNotes: result.voiceNotes };
+}
+
+function getNotesListReplyMarkup(page: number, totalPages: number, voiceNotes: VoiceListAction[]) {
+  return totalPages > 1
+    ? notesPaginationKeyboardWithVoiceActions(page, totalPages, voiceNotes)
+    : notesListKeyboardWithVoiceActions(voiceNotes);
 }
 
 async function showNotesList(ctx: any, userId: number, page = 0) {
   const result = await getNotesListPage(userId, page);
-  const replyMarkup = result.totalPages > 1
-    ? notesListPageKeyboard(result.page, result.totalPages)
-    : notesListKeyboard;
+  const replyMarkup = getNotesListReplyMarkup(result.page, result.totalPages, result.voiceNotes);
   await ctx.editMessageText(`${result.text}${result.totalPages > 1 ? `\n\n📄 Страница ${result.page + 1} из ${result.totalPages}` : ""}`, {
     reply_markup: replyMarkup,
   });
@@ -113,9 +126,7 @@ async function showNotesList(ctx: any, userId: number, page = 0) {
 notesComposer.command("notes", async (ctx) => {
   const user = await getOrCreateUser(BigInt(ctx.from!.id));
   const result = await getNotesListPage(user.id, 0);
-  const replyMarkup = result.totalPages > 1
-    ? notesListPageKeyboard(0, result.totalPages)
-    : notesListKeyboard;
+  const replyMarkup = getNotesListReplyMarkup(result.page, result.totalPages, result.voiceNotes);
   await ctx.reply(`${result.text}${result.totalPages > 1 ? `\n\n📄 Страница 1 из ${result.totalPages}` : ""}`, {
     reply_markup: replyMarkup,
   });
@@ -125,9 +136,7 @@ notesComposer.callbackQuery("menu:notes", async (ctx) => {
   await ctx.answerCallbackQuery();
   const user = await getOrCreateUser(BigInt(ctx.from.id));
   const result = await getNotesListPage(user.id, 0);
-  const replyMarkup = result.totalPages > 1
-    ? notesListPageKeyboard(0, result.totalPages)
-    : notesListKeyboard;
+  const replyMarkup = getNotesListReplyMarkup(result.page, result.totalPages, result.voiceNotes);
   await ctx.editMessageText(`${result.text}${result.totalPages > 1 ? `\n\n📄 Страница 1 из ${result.totalPages}` : ""}`, {
     reply_markup: replyMarkup,
   });
@@ -144,9 +153,7 @@ notesComposer.callbackQuery(/^notes:list_page:(\d+)$/, async (ctx) => {
   }
 
   await ctx.answerCallbackQuery();
-  const replyMarkup = result.totalPages > 1
-    ? notesListPageKeyboard(result.page, result.totalPages)
-    : notesListKeyboard;
+  const replyMarkup = getNotesListReplyMarkup(result.page, result.totalPages, result.voiceNotes);
   await ctx.editMessageText(`${result.text}${result.totalPages > 1 ? `\n\n📄 Страница ${result.page + 1} из ${result.totalPages}` : ""}`, {
     reply_markup: replyMarkup,
   });
@@ -225,14 +232,14 @@ notesComposer.command("note", async (ctx) => {
 
   if (note.voiceFileId) {
     await ctx.reply(`📝 Заметка #${noteNumber}\n\n🎙️ Голосовое сообщение`, {
-      reply_markup: noteItemKeyboard(note.id, true),
+      reply_markup: notesMenuKeyboard,
     });
     return;
   }
 
   const pages = paginateNoteText(note.text);
   await ctx.reply(notePageText(noteNumber, pages[0]!, 1, pages.length), {
-    reply_markup: pages.length === 1 ? noteItemKeyboard(note.id) : notePaginationKeyboard(note.id, 0, pages.length),
+    reply_markup: pages.length === 1 ? notesMenuKeyboard : notePaginationKeyboard(note.id, 0, pages.length),
   });
 });
 
@@ -377,7 +384,7 @@ export async function handleNotesVoiceInput(ctx: any, userId: number): Promise<b
     const notes = await listNotes(userId);
     const noteNumber = getNoteNumber(notes, note.id) ?? 1;
     await ctx.reply(`📝 Заметка #${noteNumber}\n\n🎙️ Голосовое сообщение`, {
-      reply_markup: noteItemKeyboard(note.id, true),
+      reply_markup: notesMenuKeyboard,
     });
     return true;
   }
