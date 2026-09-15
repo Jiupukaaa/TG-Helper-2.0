@@ -20,6 +20,7 @@ model User {
   notes     Note[]
   reminders Reminder[]
   shifts    Shift[]
+  savedItems SavedItem[]
   session   Session?
 
   @@map("users")
@@ -36,6 +37,26 @@ model Note {
 
   @@index([ownerId])
   @@map("notes")
+}
+
+enum SavedItemType {
+  LINK
+  PHOTO
+  GIF
+}
+
+model SavedItem {
+  id        Int           @id @default(autoincrement())
+  type      SavedItemType
+  url       String?
+  fileId    String?
+  ownerId   Int
+  owner     User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([ownerId])
+  @@map("saved_items")
 }
 
 enum ReminderStatus {
