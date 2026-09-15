@@ -19,10 +19,24 @@ export function validateDueAt(dueAt: Date): void {
   if (isInPast(dueAt)) throw new ValidationError("Эта дата и время уже в прошлом. Введите другие.");
 }
 
-export async function createReminder(ownerId: number, text: string, dueAt: Date, voiceFileId?: string) {
+type ReminderCreateOptions = {
+  repeatGroupId?: string;
+  repeatRule?: "daily" | "weekly" | "monthly";
+};
+
+export async function createReminder(ownerId: number, text: string, dueAt: Date, voiceFileId?: string, options?: ReminderCreateOptions) {
   const validatedText = validateReminderText(text);
   validateDueAt(dueAt);
-  return prisma.reminder.create({ data: { ownerId, text: validatedText, dueAt, voiceFileId } });
+  return prisma.reminder.create({
+    data: {
+      ownerId,
+      text: validatedText,
+      dueAt,
+      voiceFileId,
+      repeatGroupId: options?.repeatGroupId,
+      repeatRule: options?.repeatRule,
+    },
+  });
 }
 
 export async function listReminders(ownerId: number) {
