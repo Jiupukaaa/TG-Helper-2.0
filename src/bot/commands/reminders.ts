@@ -8,6 +8,9 @@ import { remindersMenuKeyboard, remindersListKeyboard, remindersDeleteSelectionK
 
 export const remindersComposer = new Composer();
 
+type RepeatRule = "daily" | "weekly" | "monthly";
+type ReminderDraft = { text?: string; voiceFileId?: string; awaitingRepeatCount?: boolean; repeatRule?: RepeatRule; dueAt?: string };
+
 function getReminderNumber(reminders: Array<{ id: number }>, reminderId: number): number | null {
   const index = reminders.findIndex((reminder) => reminder.id === reminderId);
   return index === -1 ? null : index + 1;
@@ -54,13 +57,15 @@ remindersComposer.callbackQuery("reminders:new", async (ctx) => {
 
 remindersComposer.callbackQuery("reminders:list", async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); await showRemindersList(ctx, user.id, user.timezone, "edit"); });
 
+remindersComposer.callbackQuery("/^reminders:repeat:(none|daily|weekly|monthly)$/", async (ctx) => {});
+
 remindersComposer.callbackQuery(/^reminders:repeat:(none|daily|weekly|monthly)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
-  const rule = ctx.match[1]!;
+  const rule = ctx.match[1] as "none" | RepeatRule;
   const user = await getOrCreateUser(BigInt(ctx.from.id));
   const session = await getSession(user.id);
   if (!session || session.step !== SessionStep.REMINDER_AWAITING_DATETIME) { await ctx.editMessageText("Сценарий создания напоминания завершён. Начните заново.", { reply_markup: remindersMenuKeyboard }); return; }
-  const draft = (session.draft as { text?: string; voiceFileId?: string; dueAt?: string } | null) ?? {};
+  const draft = (session.draft as ReminderDraft | null) ?? {};
   if (!draft.text || !draft.dueAt) { await ctx.editMessageText("Не удалось собрать напоминание. Начните заново.", { reply_markup: remindersMenuKeyboard }); return; }
   if (rule === "none") {
     const reminder = await createReminder(user.id, draft.text, new Date(draft.dueAt), draft.voiceFileId);
@@ -69,7 +74,7 @@ remindersComposer.callbackQuery(/^reminders:repeat:(none|daily|weekly|monthly)$/
     return;
   }
   await setSessionStep(user.id, SessionStep.REMINDER_AWAITING_DATETIME, { ...draft, awaitingRepeatCount: true, repeatRule: rule });
-  const labels: Record<string, string> = { daily: "каждый день", weekly: "каждую неделю", monthly: "каждый месяц" };
+  const labels: Record<RepeatRule, string> = { daily: "каждый день", weekly: "каждую неделю", monthly: "каждый месяц" };
   await ctx.editMessageText(`🔁 Повторять ${labels[rule]}.\n\nСколько раз создать? Введите число от 2 до 52.`, { reply_markup: cancelKeyboard });
 });
 
@@ -112,10 +117,10 @@ export async function handleReminderTextInput(ctx: any, userId: number): Promise
     return true;
   }
   if (session.step === SessionStep.REMINDER_AWAITING_DATETIME) {
-    const draft = (session.draft as { text?: string; voiceFileId?: string; awaitingRepeatCount?: boolean; repeatRule?: string; dueAt?: string } | null) ?? {};
+    const draft = (session.draft as ReminderDraft | null) ?? {};
     if (draft.awaitingRepeatCount) {
       const count = Number(text.trim());
-      if (!Number.isInteger(count) || count < 2 || count > 52 || !draft.text || !draft.dueAt) { await ctx.reply("⚠️ Введите целое число повторов от 2 до 52.", { reply_markup: cancelKeyboard }); return true; }
+      if (!Number.isInteger(count) || count < 2 || count > 52 || !draft.text || !draft.dueAt || !draft.repeatRule) { await ctx.reply("⚠️ Введите целое число повторов от 2 до 52.", { reply_markup: cancelKeyboard }); return true; }
       const first = new Date(draft.dueAt); const rule = draft.repeatRule;
       const { DateTime } = await import("luxon"); const user = await getOrCreateUser(BigInt(ctx.from!.id));
       const reminders: Date[] = [];
