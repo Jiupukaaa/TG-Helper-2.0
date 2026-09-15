@@ -7,6 +7,7 @@ export { ValidationError };
 const MAX_REMINDER_TEXT_LENGTH = 1000;
 const STUCK_PROCESSING_MINUTES = 5;
 const MAX_RETRIES = 3;
+const LEGACY_GROUP_WINDOW_MS = 10 * 60 * 1000;
 
 export function validateReminderText(text: string): string {
   const trimmed = text.trim();
@@ -39,11 +40,70 @@ export async function createReminder(ownerId: number, text: string, dueAt: Date,
   });
 }
 
+function legacyRepeatRule(previous: Date, current: Date): "daily" | "weekly" | "monthly" | null {
+  const diffHours = (current.getTime() - previous.getTime()) / 3600000;
+  if (Math.abs(diffHours - 24) < 0.01) return "daily";
+  if (Math.abs(diffHours - 168) < 0.01) return "weekly";
+  return null;
+}
+
+function groupLegacyRecurringReminders<T extends {
+  id: number;
+  ownerId: number;
+  text: string;
+  voiceFileId: string | null;
+  dueAt: Date;
+  createdAt: Date;
+  repeatGroupId: string | null;
+  repeatRule: string | null;
+}>(reminders: T[]): T[] {
+  const result = [...reminders];
+  const candidates = result.filter((reminder) => !reminder.repeatGroupId);
+  const processed = new Set<number>();
+
+  for (const seed of candidates) {
+    if (processed.has(seed.id)) continue;
+
+    const group = candidates.filter((item) =>
+      !processed.has(item.id) &&
+      item.ownerId === seed.ownerId &&
+      item.text === seed.text &&
+      item.voiceFileId === seed.voiceFileId &&
+      Math.abs(item.createdAt.getTime() - seed.createdAt.getTime()) <= LEGACY_GROUP_WINDOW_MS,
+    ).sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
+
+    if (group.length < 2) continue;
+
+    let rule: "daily" | "weekly" | null = null;
+    let valid = true;
+    for (let i = 1; i < group.length; i += 1) {
+      const detected = legacyRepeatRule(group[i - 1]!.dueAt, group[i]!.dueAt);
+      if (!detected) { valid = false; break; }
+      if (rule && rule !== detected) { valid = false; break; }
+      rule = detected;
+    }
+
+    if (!valid || !rule) continue;
+
+    const virtualGroupId = `legacy-${seed.id}`;
+    for (const item of group) {
+      const index = result.findIndex((reminder) => reminder.id === item.id);
+      if (index !== -1) {
+        result[index] = { ...result[index]!, repeatGroupId: virtualGroupId, repeatRule: rule };
+        processed.add(item.id);
+      }
+    }
+  }
+
+  return result;
+}
+
 export async function listReminders(ownerId: number) {
-  return prisma.reminder.findMany({
+  const reminders = await prisma.reminder.findMany({
     where: { ownerId, shiftId: null, status: { in: [ReminderStatus.PENDING, ReminderStatus.PROCESSING] } },
     orderBy: { dueAt: "asc" },
   });
+  return groupLegacyRecurringReminders(reminders);
 }
 
 export async function getOwnedReminder(ownerId: number, reminderId: number) {
