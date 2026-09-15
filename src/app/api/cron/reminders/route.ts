@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { getBot } from "@/bot/client";
 import { claimDueReminders, markReminderSent, markReminderFailed } from "@/services/remindersService";
+import { cleanupPastShifts } from "@/services/shiftsService";
 import { formatLocalDateTime } from "@/lib/time";
 
 export const runtime = "nodejs";
@@ -24,6 +25,7 @@ export async function POST(req: NextRequest) {
   }
 
   const bot = getBot();
+  const cleanedShifts = await cleanupPastShifts();
   const claimed = await claimDueReminders();
   let sent = 0;
   let failed = 0;
@@ -50,7 +52,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, claimed: claimed.length, sent, failed });
+  return NextResponse.json({ ok: true, cleanedShifts, claimed: claimed.length, sent, failed });
 }
 
 export const GET = POST;
