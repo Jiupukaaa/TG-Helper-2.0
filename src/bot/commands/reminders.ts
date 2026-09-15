@@ -48,24 +48,23 @@ function formatReminderList(reminders: ReminderListItem[], timezone: string): st
   if (reminders.length === 0) return "⏰ У вас пока нет активных напоминаний. Добавьте первое напоминание:";
 
   const lines: string[] = [];
-  let index = 0;
+  const processedGroups = new Set<string>();
 
-  while (index < reminders.length) {
-    const reminder = reminders[index]!;
+  reminders.forEach((reminder, index) => {
     if (reminder.repeatGroupId) {
+      if (processedGroups.has(reminder.repeatGroupId)) return;
+      processedGroups.add(reminder.repeatGroupId);
       const group = reminders.filter((item) => item.repeatGroupId === reminder.repeatGroupId);
       const first = group[0]!;
       const title = first.voiceFileId ? "🎙️ Голосовое сообщение" : first.text;
       lines.push(`🔁 ${title} — ${repeatLabel(first.repeatRule)} ×${group.length}`);
       lines.push(`   Следующее: ${formatLocalDateTime(first.dueAt, timezone)}`);
-      index += group.length;
-      continue;
+      return;
     }
 
     const title = reminder.voiceFileId ? "🎙️ Голосовое сообщение" : reminder.text;
     lines.push(`#${index + 1} — ${formatLocalDateTime(reminder.dueAt, timezone)} — ${title}`);
-    index += 1;
-  }
+  });
 
   return `📋 Ваши напоминания:\n\n${lines.join("\n")}\n\nВыберите действие:`;
 }
