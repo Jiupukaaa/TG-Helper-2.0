@@ -43,7 +43,6 @@ enum SavedItemType {
   LINK
   PHOTO
   GIF
-  VOICE
 }
 
 model SavedItem {
