@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Composer, InlineKeyboard } from "grammy";
 import { SessionStep } from "@prisma/client";
 import { getOrCreateUser, setSessionStep, clearSession, getSession } from "@/bot/session";
@@ -10,6 +11,15 @@ export const remindersComposer = new Composer();
 
 type RepeatRule = "daily" | "weekly" | "monthly";
 type ReminderDraft = { text?: string; voiceFileId?: string; awaitingRepeatCount?: boolean; repeatRule?: RepeatRule; dueAt?: string };
+
+type ReminderListItem = {
+  id: number;
+  text: string;
+  voiceFileId: string | null;
+  dueAt: Date;
+  repeatGroupId: string | null;
+  repeatRule: string | null;
+};
 
 function getReminderNumber(reminders: Array<{ id: number }>, reminderId: number): number | null {
   const index = reminders.findIndex((reminder) => reminder.id === reminderId);
@@ -25,11 +35,44 @@ function repeatKeyboard() {
     .row().text("❌ Отмена", "session:cancel");
 }
 
+function repeatLabel(rule: string | null): string {
+  const labels: Record<string, string> = {
+    daily: "ежедневно",
+    weekly: "еженедельно",
+    monthly: "ежемесячно",
+  };
+  return labels[rule ?? ""] ?? "по расписанию";
+}
+
+function formatReminderList(reminders: ReminderListItem[], timezone: string): string {
+  if (reminders.length === 0) return "⏰ У вас пока нет активных напоминаний. Добавьте первое напоминание:";
+
+  const lines: string[] = [];
+  let index = 0;
+
+  while (index < reminders.length) {
+    const reminder = reminders[index]!;
+    if (reminder.repeatGroupId) {
+      const group = reminders.filter((item) => item.repeatGroupId === reminder.repeatGroupId);
+      const first = group[0]!;
+      const title = first.voiceFileId ? "🎙️ Голосовое сообщение" : first.text;
+      lines.push(`🔁 ${title} — ${repeatLabel(first.repeatRule)} ×${group.length}`);
+      lines.push(`   Следующее: ${formatLocalDateTime(first.dueAt, timezone)}`);
+      index += group.length;
+      continue;
+    }
+
+    const title = reminder.voiceFileId ? "🎙️ Голосовое сообщение" : reminder.text;
+    lines.push(`#${index + 1} — ${formatLocalDateTime(reminder.dueAt, timezone)} — ${title}`);
+    index += 1;
+  }
+
+  return `📋 Ваши напоминания:\n\n${lines.join("\n")}\n\nВыберите действие:`;
+}
+
 async function showRemindersList(ctx: any, userId: number, timezone: string, mode: "reply" | "edit") {
   const reminders = await listReminders(userId);
-  const text = reminders.length === 0
-    ? "⏰ У вас пока нет активных напоминаний. Добавьте первое напоминание:"
-    : `📋 Ваши напоминания:\n\n${reminders.map((reminder, index) => `#${index + 1} — ${formatLocalDateTime(reminder.dueAt, timezone)} — ${reminder.voiceFileId ? "🎙️ Голосовое сообщение" : reminder.text}`).join("\n")}\n\nВыберите действие:`;
+  const text = formatReminderList(reminders, timezone);
   if (mode === "reply") await ctx.reply(text, { reply_markup: remindersListKeyboard });
   else await ctx.editMessageText(text, { reply_markup: remindersListKeyboard });
 }
@@ -56,8 +99,6 @@ remindersComposer.callbackQuery("reminders:new", async (ctx) => {
 });
 
 remindersComposer.callbackQuery("reminders:list", async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); await showRemindersList(ctx, user.id, user.timezone, "edit"); });
-
-remindersComposer.callbackQuery("/^reminders:repeat:(none|daily|weekly|monthly)$/", async (ctx) => {});
 
 remindersComposer.callbackQuery(/^reminders:repeat:(none|daily|weekly|monthly)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
@@ -130,7 +171,8 @@ export async function handleReminderTextInput(ctx: any, userId: number): Promise
         reminders.push(next.toJSDate());
       }
       try {
-        for (const dueAt of reminders) await createReminder(userId, draft.text, dueAt, draft.voiceFileId);
+        const repeatGroupId = randomUUID();
+        for (const dueAt of reminders) await createReminder(userId, draft.text, dueAt, draft.voiceFileId, { repeatGroupId, repeatRule: rule });
         await clearSession(userId);
         await ctx.reply(`✅ Создано повторяющихся напоминаний: ${count}.\nПервое: ${formatLocalDateTime(reminders[0]!, user.timezone)}\nПоследнее: ${formatLocalDateTime(reminders[reminders.length - 1]!, user.timezone)}`, { reply_markup: remindersMenuKeyboard });
       } catch (err) { if (err instanceof ValidationError) await ctx.reply(`⚠️ ${err.message}`, { reply_markup: cancelKeyboard }); else throw err; }
