@@ -2,9 +2,9 @@ import { Bot } from "grammy";
 import { SessionStep } from "@prisma/client";
 import { authMiddleware } from "@/bot/middleware/auth";
 import { getOrCreateUser, clearSession, getSession, setSessionStep } from "@/bot/session";
-import { mainMenuKeyboard, voiceNoteSavedKeyboard, cancelKeyboard } from "@/bot/keyboards";
+import { mainMenuKeyboard, voiceNoteSavedKeyboard, notesMenuKeyboard, cancelKeyboard } from "@/bot/keyboards";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
-import { createVoiceNote, getOwnedNote, listNotes, replaceVoiceNote } from "@/services/notesService";
+import { createNote, createVoiceNote, getOwnedNote, listNotes, replaceVoiceNote } from "@/services/notesService";
 import { notesComposer, handleNotesTextInput, handleNotesVoiceInput } from "./notes";
 import { remindersComposer, handleReminderTextInput, handleReminderVoiceInput } from "./reminders";
 import { shiftsComposer, handleShiftTextInput } from "./shifts";
@@ -54,7 +54,16 @@ export function registerHandlers(bot: Bot): void {
     if (await handleNotesTextInput(ctx, user.id)) return;
     if (await handleReminderTextInput(ctx, user.id)) return;
     if (await handleShiftTextInput(ctx, user.id)) return;
-    await ctx.reply("Не понимаю это сообщение. Используйте меню или /notes, /reminders, /shifts.");
+
+    const text = ctx.message.text;
+    try {
+      const note = await createNote(user.id, text);
+      const notes = await listNotes(user.id);
+      const noteNumber = notes.findIndex((item) => item.id === note.id) + 1;
+      await ctx.reply(`✅ Заметка #${noteNumber} сохранена.`, { reply_markup: notesMenuKeyboard });
+    } catch (err) {
+      await ctx.reply("⚠️ Не удалось сохранить заметку. Попробуйте ещё раз.");
+    }
   });
 
   bot.on("message:voice", async (ctx) => {
