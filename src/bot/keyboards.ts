@@ -4,7 +4,9 @@ export const mainMenuKeyboard = new InlineKeyboard()
   .text("📝 Заметки", "menu:notes")
   .text("⏰ Напоминания", "menu:reminders")
   .row()
-  .text("📅 График работы", "menu:shifts");
+  .text("📅 График работы", "menu:shifts")
+  .row()
+  .text("🔖 Сохраненки", "menu:saved");
 
 export const notesMenuKeyboard = new InlineKeyboard()
   .text("➕ Новая заметка", "notes:new")
@@ -83,6 +85,39 @@ export const remindersListKeyboard = new InlineKeyboard()
   .text("🗑 Удалить", "reminders:delete_mode")
   .row()
   .text("⬅️ В главное меню", "menu:main");
+
+export function savedListKeyboard(items: Array<{ id: number; type: "LINK" | "PHOTO" | "GIF" }>): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  for (const item of items) {
+    if (item.type === "LINK") keyboard.row().text(`🔗 Открыть #${item.id}`, `saved:open:${item.id}`);
+    else if (item.type === "PHOTO") keyboard.row().text(`🖼️ Отправить фото #${item.id}`, `saved:send:${item.id}`);
+    else keyboard.row().text(`🖼️ Отправить GIF #${item.id}`, `saved:send:${item.id}`);
+  }
+  keyboard.row().text("🗑 Удалить", "saved:delete_mode").row().text("⬅️ В главное меню", "menu:main");
+  return keyboard;
+}
+
+export function savedDeleteSelectionKeyboard(items: Array<{ id: number }>): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  items.forEach((item, index) => {
+    keyboard.text(`#${index + 1}`, `saved:delete_select:${item.id}`);
+    if (index % 2 === 1) keyboard.row();
+  });
+  if (items.length % 2 === 1) keyboard.row();
+  keyboard.text("⬅️ К списку", "saved:list");
+  return keyboard;
+}
+
+export function savedListKeyboardWithLinks(items: Array<{ id: number; type: "LINK" | "PHOTO" | "GIF"; url: string | null }>): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  for (const item of items) {
+    if (item.type === "LINK" && item.url) keyboard.row().url(`🔗 Открыть #${item.number ?? item.id}`, item.url);
+    else if (item.type === "PHOTO") keyboard.row().text(`🖼️ Отправить фото #${item.number ?? item.id}`, `saved:send:${item.id}`);
+    else keyboard.row().text(`🖼️ Отправить GIF #${item.number ?? item.id}`, `saved:send:${item.id}`);
+  }
+  keyboard.row().text("🗑 Удалить", "saved:delete_mode").row().text("⬅️ В главное меню", "menu:main");
+  return keyboard;
+}
 
 export function notesDeleteSelectionKeyboard(noteIds: number[]): InlineKeyboard {
   const keyboard = new InlineKeyboard();
