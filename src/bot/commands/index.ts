@@ -11,7 +11,7 @@ import { remindersComposer, handleReminderTextInput, handleReminderVoiceInput } 
 import { shiftsComposer, handleShiftTextInput } from "./shifts";
 import { shiftCalendarComposer } from "./shiftCalendar";
 import { todayComposer } from "./today";
-import { savedComposer, handleSavedTextInput, handleSavedPhotoInput, handleSavedGifInput } from "./saved";
+import { savedComposer, handleSavedTextInput, handleSavedPhotoInput, handleSavedGifInput, handleSavedVoiceInput } from "./saved";
 
 export function registerHandlers(bot: Bot): void {
   bot.use(authMiddleware);
@@ -30,6 +30,7 @@ export function registerHandlers(bot: Bot): void {
   bot.on("message:animation", async (ctx) => { const user = await getOrCreateUser(BigInt(ctx.from!.id)); if (await handleSavedGifInput(ctx, user.id)) return; });
   bot.on("message:voice", async (ctx) => {
     const user = await getOrCreateUser(BigInt(ctx.from!.id));
+    if (await handleSavedVoiceInput(ctx, user.id)) return;
     if (await handleNotesVoiceInput(ctx, user.id)) return;
     if (await handleReminderVoiceInput(ctx, user.id)) return;
     const session = await getSession(user.id);
