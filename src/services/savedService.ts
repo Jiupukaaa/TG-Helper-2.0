@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-export type SavedItemType = "LINK" | "PHOTO" | "GIF" | "VOICE";
+export type SavedItemType = "LINK" | "PHOTO" | "GIF";
 
 export function detectSavedLink(text: string): string | null {
   const trimmed = text.trim();
@@ -36,12 +36,6 @@ export async function createSavedPhoto(ownerId: number, fileId: string) {
 export async function createSavedGif(ownerId: number, fileId: string) {
   return prisma.savedItem.create({
     data: { ownerId, type: "GIF", fileId },
-  });
-}
-
-export async function createSavedVoice(ownerId: number, fileId: string) {
-  return prisma.savedItem.create({
-    data: { ownerId, type: "VOICE", fileId },
   });
 }
 
