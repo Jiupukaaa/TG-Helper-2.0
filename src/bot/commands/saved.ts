@@ -1,4 +1,4 @@
-import { Composer } from "grammy";
+import { Composer, InlineKeyboard } from "grammy";
 import { getOrCreateUser } from "@/bot/session";
 import {
   createSavedGif,
@@ -13,7 +13,9 @@ import { mainMenuKeyboard, savedDeleteSelectionKeyboard } from "@/bot/keyboards"
 
 export const savedComposer = new Composer();
 
-function itemLabel(item: { type: "LINK" | "PHOTO" | "GIF"; url: string | null }, number: number): string {
+type SavedItem = { id: number; type: "LINK" | "PHOTO" | "GIF"; url: string | null; fileId: string | null };
+
+function itemLabel(item: Pick<SavedItem, "type" | "url">, number: number): string {
   if (item.type === "LINK") return `#${number} 🔗 ${item.url}`;
   if (item.type === "PHOTO") return `#${number} 🖼️ Фото`;
   return `#${number} 🖼️ GIF`;
@@ -29,7 +31,7 @@ async function renderSavedList(ctx: any, userId: number, edit = true) {
   }
 
   const lines = items.map((item, index) => itemLabel(item, index + 1));
-  const keyboard = new (require("grammy").InlineKeyboard)();
+  const keyboard = new InlineKeyboard();
   items.forEach((item, index) => {
     const number = index + 1;
     if (item.type === "LINK" && item.url) keyboard.row().url(`🔗 Открыть #${number}`, item.url);
@@ -99,7 +101,7 @@ savedComposer.callbackQuery(/^saved:delete_select:(\d+)$/, async (ctx) => {
   const items = await listSavedItems(user.id);
   const number = items.findIndex((entry) => entry.id === id) + 1;
   await ctx.editMessageText(`Удалить сохраненку #${number}? Это необратимо.`, {
-    reply_markup: new (require("grammy").InlineKeyboard)()
+    reply_markup: new InlineKeyboard()
       .text("✅ Да, удалить", `saved:delete_confirm:${id}`)
       .text("❌ Отмена", "saved:list"),
   });
