@@ -80,6 +80,13 @@ export async function listUpcomingShifts(ownerId: number) {
   });
 }
 
+export async function cleanupPastShifts() {
+  const result = await prisma.shift.deleteMany({
+    where: { startAt: { lte: new Date() } },
+  });
+  return result.count;
+}
+
 export async function getOwnedShift(ownerId: number, shiftId: number) {
   return prisma.shift.findFirst({ where: { id: shiftId, ownerId } });
 }
