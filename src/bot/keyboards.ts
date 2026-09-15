@@ -87,7 +87,7 @@ export const remindersListKeyboard = new InlineKeyboard()
 export function notesDeleteSelectionKeyboard(noteIds: number[]): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   noteIds.forEach((id, index) => {
-    keyboard.text(`#${id}`, `notes:delete_select:${id}`);
+    keyboard.text(`#${index + 1}`, `notes:delete_select:${id}`);
     if (index % 2 === 1) keyboard.row();
   });
   if (noteIds.length % 2 === 1) keyboard.row();
