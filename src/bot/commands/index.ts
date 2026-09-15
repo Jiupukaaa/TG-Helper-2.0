@@ -8,6 +8,7 @@ import { createNote, createVoiceNote, getOwnedNote, listNotes, replaceVoiceNote 
 import { notesComposer, handleNotesTextInput, handleNotesVoiceInput } from "./notes";
 import { remindersComposer, handleReminderTextInput, handleReminderVoiceInput } from "./reminders";
 import { shiftsComposer, handleShiftTextInput } from "./shifts";
+import { savedComposer, handleSavedTextInput, handleSavedPhotoInput, handleSavedGifInput } from "./saved";
 
 export function registerHandlers(bot: Bot): void {
   bot.use(authMiddleware);
@@ -20,7 +21,7 @@ export function registerHandlers(bot: Bot): void {
     await ctx.reply(
       "👋 Привет! Я TG Helper — личный помощник для заметок, напоминаний и графика работы.\n\n" +
         timezoneMessage +
-        "Дальше используйте меню ниже или команды /notes, /reminders и /shifts.",
+        "Дальше используйте меню ниже или команды /notes, /reminders, /shifts и /saved.",
       { reply_markup: mainMenuKeyboard }
     );
   });
@@ -45,6 +46,7 @@ export function registerHandlers(bot: Bot): void {
     });
   });
 
+  bot.use(savedComposer);
   bot.use(notesComposer);
   bot.use(remindersComposer);
   bot.use(shiftsComposer);
@@ -54,6 +56,7 @@ export function registerHandlers(bot: Bot): void {
     if (await handleNotesTextInput(ctx, user.id)) return;
     if (await handleReminderTextInput(ctx, user.id)) return;
     if (await handleShiftTextInput(ctx, user.id)) return;
+    if (await handleSavedTextInput(ctx, user.id)) return;
 
     const text = ctx.message.text;
     try {
@@ -64,6 +67,16 @@ export function registerHandlers(bot: Bot): void {
     } catch (err) {
       await ctx.reply("⚠️ Не удалось сохранить заметку. Попробуйте ещё раз.");
     }
+  });
+
+  bot.on("message:photo", async (ctx) => {
+    const user = await getOrCreateUser(BigInt(ctx.from!.id));
+    if (await handleSavedPhotoInput(ctx, user.id)) return;
+  });
+
+  bot.on("message:animation", async (ctx) => {
+    const user = await getOrCreateUser(BigInt(ctx.from!.id));
+    if (await handleSavedGifInput(ctx, user.id)) return;
   });
 
   bot.on("message:voice", async (ctx) => {
@@ -115,7 +128,7 @@ export function registerHandlers(bot: Bot): void {
     if (ctx.message.text?.startsWith("/")) {
       const user = await getOrCreateUser(BigInt(ctx.from!.id));
       await clearSession(user.id);
-      await ctx.reply("Неизвестная команда. Используйте /notes, /reminders или /shifts.");
+      await ctx.reply("Неизвестная команда. Используйте /notes, /reminders, /shifts или /saved.");
       return;
     }
     await next();
