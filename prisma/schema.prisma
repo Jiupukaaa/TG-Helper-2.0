@@ -83,6 +83,8 @@ model Reminder {
   shiftId   Int?
   shift     Shift?   @relation(fields: [shiftId], references: [id], onDelete: Cascade)
   offsetMinutes Int?
+  repeatGroupId String?
+  repeatRule    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -90,6 +92,7 @@ model Reminder {
   @@index([status, dueAt])
   @@index([ownerId])
   @@index([shiftId])
+  @@index([ownerId, repeatGroupId])
   @@map("reminders")
 }
 
