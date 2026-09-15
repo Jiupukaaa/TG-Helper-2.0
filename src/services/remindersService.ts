@@ -40,7 +40,7 @@ export async function createReminder(ownerId: number, text: string, dueAt: Date,
   });
 }
 
-function legacyRepeatRule(previous: Date, current: Date): "daily" | "weekly" | "monthly" | null {
+function legacyRepeatRule(previous: Date, current: Date): "daily" | "weekly" | null {
   const diffHours = (current.getTime() - previous.getTime()) / 3600000;
   if (Math.abs(diffHours - 24) < 0.01) return "daily";
   if (Math.abs(diffHours - 168) < 0.01) return "weekly";
