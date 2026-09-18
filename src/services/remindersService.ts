@@ -116,30 +116,42 @@ export async function deleteReminder(ownerId: number, reminderId: number) {
   return prisma.reminder.delete({ where: { id: reminderId } });
 }
 
+async function getActiveReminders(ownerId: number) {
+  const reminders = await prisma.reminder.findMany({
+    where: { ownerId, shiftId: null, status: { in: [ReminderStatus.PENDING, ReminderStatus.PROCESSING] } },
+    orderBy: { dueAt: "asc" },
+  });
+  return groupLegacyRecurringReminders(reminders);
+}
+
 export async function getReminderGroup(ownerId: number, reminderId: number) {
   const existing = await getOwnedReminder(ownerId, reminderId);
   if (!existing) return [];
-  if (!existing.repeatGroupId) return [existing];
-  return prisma.reminder.findMany({
-    where: {
-      ownerId,
-      repeatGroupId: existing.repeatGroupId,
-      shiftId: null,
-      status: { in: [ReminderStatus.PENDING, ReminderStatus.PROCESSING] },
-    },
-    orderBy: { dueAt: "asc" },
-  });
+  if (existing.repeatGroupId) {
+    return prisma.reminder.findMany({
+      where: {
+        ownerId,
+        repeatGroupId: existing.repeatGroupId,
+        shiftId: null,
+        status: { in: [ReminderStatus.PENDING, ReminderStatus.PROCESSING] },
+      },
+      orderBy: { dueAt: "asc" },
+    });
+  }
+
+  const active = await getActiveReminders(ownerId);
+  const grouped = active.find((item) => item.id === reminderId);
+  if (!grouped?.repeatGroupId) return [existing];
+
+  return active.filter((item) => item.repeatGroupId === grouped.repeatGroupId);
 }
 
 export async function deleteReminderGroup(ownerId: number, reminderId: number) {
-  const existing = await getOwnedReminder(ownerId, reminderId);
-  if (!existing) return 0;
-  if (!existing.repeatGroupId) {
-    const deleted = await prisma.reminder.delete({ where: { id: existing.id } });
-    return deleted ? 1 : 0;
-  }
+  const group = await getReminderGroup(ownerId, reminderId);
+  if (!group.length) return 0;
+
   const result = await prisma.reminder.deleteMany({
-    where: { ownerId, repeatGroupId: existing.repeatGroupId, shiftId: null },
+    where: { ownerId, id: { in: group.map((item) => item.id) }, shiftId: null },
   });
   return result.count;
 }
@@ -155,7 +167,7 @@ export async function updateReminderGroup(
   if (changes.text !== undefined) {
     const text = validateReminderText(changes.text);
     const result = await prisma.reminder.updateMany({
-      where: { ownerId, repeatGroupId: group[0]!.repeatGroupId ?? undefined, id: group[0]!.repeatGroupId ? undefined : group[0]!.id },
+      where: { ownerId, id: { in: group.map((item) => item.id) }, shiftId: null },
       data: { text },
     });
     return result.count;
