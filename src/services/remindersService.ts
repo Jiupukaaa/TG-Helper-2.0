@@ -116,6 +116,68 @@ export async function deleteReminder(ownerId: number, reminderId: number) {
   return prisma.reminder.delete({ where: { id: reminderId } });
 }
 
+export async function getReminderGroup(ownerId: number, reminderId: number) {
+  const existing = await getOwnedReminder(ownerId, reminderId);
+  if (!existing) return [];
+  if (!existing.repeatGroupId) return [existing];
+  return prisma.reminder.findMany({
+    where: {
+      ownerId,
+      repeatGroupId: existing.repeatGroupId,
+      shiftId: null,
+      status: { in: [ReminderStatus.PENDING, ReminderStatus.PROCESSING] },
+    },
+    orderBy: { dueAt: "asc" },
+  });
+}
+
+export async function deleteReminderGroup(ownerId: number, reminderId: number) {
+  const existing = await getOwnedReminder(ownerId, reminderId);
+  if (!existing) return 0;
+  if (!existing.repeatGroupId) {
+    const deleted = await prisma.reminder.delete({ where: { id: existing.id } });
+    return deleted ? 1 : 0;
+  }
+  const result = await prisma.reminder.deleteMany({
+    where: { ownerId, repeatGroupId: existing.repeatGroupId, shiftId: null },
+  });
+  return result.count;
+}
+
+export async function updateReminderGroup(
+  ownerId: number,
+  reminderId: number,
+  changes: { text?: string; dueAt?: Date },
+) {
+  const group = await getReminderGroup(ownerId, reminderId);
+  if (!group.length) return 0;
+
+  if (changes.text !== undefined) {
+    const text = validateReminderText(changes.text);
+    const result = await prisma.reminder.updateMany({
+      where: { ownerId, repeatGroupId: group[0]!.repeatGroupId ?? undefined, id: group[0]!.repeatGroupId ? undefined : group[0]!.id },
+      data: { text },
+    });
+    return result.count;
+  }
+
+  if (changes.dueAt !== undefined) {
+    validateDueAt(changes.dueAt);
+    const first = group[0]!;
+    const delta = changes.dueAt.getTime() - first.dueAt.getTime();
+    let count = 0;
+    for (const reminder of group) {
+      const dueAt = new Date(reminder.dueAt.getTime() + delta);
+      validateDueAt(dueAt);
+      await prisma.reminder.update({ where: { id: reminder.id }, data: { dueAt } });
+      count += 1;
+    }
+    return count;
+  }
+
+  return 0;
+}
+
 export async function claimDueReminders(limit = 50) {
   const stuckThreshold = new Date(Date.now() - STUCK_PROCESSING_MINUTES * 60 * 1000);
   const claimed = await prisma.$queryRaw<{ id: number }[]>`
