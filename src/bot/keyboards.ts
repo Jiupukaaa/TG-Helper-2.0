@@ -46,13 +46,21 @@ export function reminderManageKeyboard(reminderId: number): InlineKeyboard {
     .text("⬅️ К списку", "reminders:list");
 }
 
-export function reminderInstanceSelectionKeyboard(reminderIds: number[]): InlineKeyboard {
+export function reminderInstanceSelectionKeyboard(reminderIds: number[], page: number, totalPages: number, groupId: number): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   reminderIds.forEach((id, index) => {
     keyboard.text(`#${index + 1}`, `reminders:delete_one:${id}`);
     if (index % 2 === 1) keyboard.row();
   });
   if (reminderIds.length % 2 === 1) keyboard.row();
+
+  if (totalPages > 1) {
+    if (page > 0) keyboard.text("◀️", `reminders:delete_one_page:${groupId}:${page - 1}`);
+    keyboard.text(`${page + 1}/${totalPages}`, "reminders:noop");
+    if (page < totalPages - 1) keyboard.text("▶️", `reminders:delete_one_page:${groupId}:${page + 1}`);
+    keyboard.row();
+  }
+
   return keyboard.text("⬅️ Назад", "reminders:delete_mode");
 }
 
