@@ -7,6 +7,8 @@ export type ReminderDraft = {
   dueAt?: string;
   awaitingRepeatCount?: boolean;
   repeatRule?: "daily" | "weekly" | "monthly";
+  editMode?: "date" | "time" | "text";
+  editReminderId?: number;
 };
 export type NoteEditDraft = { noteId?: number };
 export type ShiftDraft = { dates?: string[]; calendarMonth?: string; time?: string; workDays?: number; offDays?: number; firstDate?: string; editShiftId?: number; pendingStarts?: string[] };
