@@ -219,11 +219,40 @@ remindersComposer.callbackQuery(/^reminders:delete_one_mode:(\d+)$/, async (ctx)
     await ctx.editMessageText("У этого напоминания нет повторов. Можно удалить его полностью.", { reply_markup: reminderManageKeyboard(group[0]!.id) });
     return;
   }
-  const lines = group.map((item, index) => `#${index + 1} — ${formatLocalDateTime(item.dueAt, user.timezone)} — ${item.voiceFileId ? "🎙️ Голосовое сообщение" : item.text}`).join("\n");
+  const pageSize = 5;
+  const totalPages = Math.ceil(group.length / pageSize);
+  const page = 0;
+  const pageItems = group.slice(0, pageSize);
+  const lines = pageItems.map((item, index) => `#${index + 1} — ${formatLocalDateTime(item.dueAt, user.timezone)} — ${item.voiceFileId ? "🎙️ Голосовое сообщение" : item.text}`).join("\n");
   await ctx.editMessageText(
-    `❌ Выберите одно напоминание для удаления:\n\n${lines}`,
-    { reply_markup: reminderInstanceSelectionKeyboard(group.map((item) => item.id)) },
+    `❌ Выберите одно напоминание для удаления:\n\n${lines}\n\nСтраница ${page + 1} из ${totalPages}`,
+    { reply_markup: reminderInstanceSelectionKeyboard(pageItems.map((item) => item.id), page, totalPages, Number(ctx.match[1])) },
   );
+});
+
+remindersComposer.callbackQuery(/^reminders:delete_one_page:(\d+):(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const groupId = Number(ctx.match[1]);
+  const page = Number(ctx.match[2]);
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const group = await getReminderGroup(user.id, groupId);
+  if (!group.length) {
+    await ctx.editMessageText("Напоминание не найдено.", { reply_markup: remindersMenuKeyboard });
+    return;
+  }
+  const pageSize = 5;
+  const totalPages = Math.ceil(group.length / pageSize);
+  const safePage = Math.max(0, Math.min(page, totalPages - 1));
+  const pageItems = group.slice(safePage * pageSize, (safePage + 1) * pageSize);
+  const lines = pageItems.map((item, index) => `#${index + 1} — ${formatLocalDateTime(item.dueAt, user.timezone)} — ${item.voiceFileId ? "🎙️ Голосовое сообщение" : item.text}`).join("\n");
+  await ctx.editMessageText(
+    `❌ Выберите одно напоминание для удаления:\n\n${lines}\n\nСтраница ${safePage + 1} из ${totalPages}`,
+    { reply_markup: reminderInstanceSelectionKeyboard(pageItems.map((item) => item.id), safePage, totalPages, groupId) },
+  );
+});
+
+remindersComposer.callbackQuery("reminders:noop", async (ctx) => {
+  await ctx.answerCallbackQuery();
 });
 
 remindersComposer.callbackQuery(/^reminders:delete_one:(\d+)$/, async (ctx) => {
