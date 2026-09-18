@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import { Composer, InlineKeyboard } from "grammy";
 import { SessionStep } from "@prisma/client";
 import { getOrCreateUser, setSessionStep, clearSession, getSession } from "@/bot/session";
-import { createReminder, listReminders, deleteReminder, getOwnedReminder, ValidationError } from "@/services/remindersService";
+import { createReminder, listReminders, deleteReminder, deleteReminderGroup, getReminderGroup, updateReminderGroup, getOwnedReminder, ValidationError } from "@/services/remindersService";
 import { VOICE_NOTE_TEXT } from "@/services/notesService";
 import { parseLocalDateTime, formatLocalDateTime, DEFAULT_TIMEZONE, isValidTimezone } from "@/lib/time";
-import { remindersMenuKeyboard, remindersListKeyboard, remindersDeleteSelectionKeyboard, cancelKeyboard, confirmDeleteKeyboard, mainMenuKeyboard } from "@/bot/keyboards";
+import { remindersMenuKeyboard, remindersListKeyboard, remindersDeleteSelectionKeyboard, reminderManageKeyboard, reminderInstanceSelectionKeyboard, reminderEditFieldKeyboard, cancelKeyboard, confirmDeleteKeyboard, mainMenuKeyboard } from "@/bot/keyboards";
 
 export const remindersComposer = new Composer();
 
@@ -119,18 +119,148 @@ remindersComposer.callbackQuery(/^reminders:repeat:(none|daily|weekly|monthly)$/
 });
 
 remindersComposer.callbackQuery("reminders:delete_mode", async (ctx) => {
-  await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); const reminders = await listReminders(user.id);
-  if (!reminders.length) { await ctx.editMessageText("⏰ У вас пока нет активных напоминаний.", { reply_markup: remindersListKeyboard }); return; }
-  const lines = reminders.map((r, i) => `#${i + 1} — ${formatLocalDateTime(r.dueAt, user.timezone)} — ${r.voiceFileId ? "🎙️ Голосовое сообщение" : r.text}`).join("\n");
-  await ctx.editMessageText(`🗑 Выберите номер напоминания для удаления:\n\n${lines}`, { reply_markup: remindersDeleteSelectionKeyboard(reminders.map((r) => r.id)) });
+  await ctx.answerCallbackQuery();
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const reminders = await listReminders(user.id);
+  if (!reminders.length) {
+    await ctx.editMessageText("⏰ У вас пока нет активных напоминаний.", { reply_markup: remindersListKeyboard });
+    return;
+  }
+
+  const lines: string[] = [];
+  const representatives: number[] = [];
+  const processedGroups = new Set<string>();
+
+  reminders.forEach((reminder) => {
+    if (reminder.repeatGroupId) {
+      if (processedGroups.has(reminder.repeatGroupId)) return;
+      processedGroups.add(reminder.repeatGroupId);
+      const group = reminders.filter((item) => item.repeatGroupId === reminder.repeatGroupId);
+      const first = group[0]!;
+      representatives.push(first.id);
+      const title = first.voiceFileId ? "🎙️ Голосовое сообщение" : first.text;
+      lines.push(`🔁 #${representatives.length} — ${title} — ${repeatLabel(first.repeatRule)} ×${group.length}`);
+      lines.push(`   Следующее: ${formatLocalDateTime(first.dueAt, user.timezone)}`);
+      return;
+    }
+    representatives.push(reminder.id);
+    const title = reminder.voiceFileId ? "🎙️ Голосовое сообщение" : reminder.text;
+    lines.push(`#${representatives.length} — ${formatLocalDateTime(reminder.dueAt, user.timezone)} — ${title}`);
+  });
+
+  await ctx.editMessageText(
+    `🗑 Выберите напоминание:\n\n${lines.join("\n")}\n\nДля повторяющихся напоминаний будет открыто отдельное меню.`,
+    { reply_markup: remindersDeleteSelectionKeyboard(representatives) },
+  );
 });
 
 remindersComposer.callbackQuery(/^reminders:delete_select:(\d+)$/, async (ctx) => {
-  await ctx.answerCallbackQuery(); const id = Number(ctx.match[1]); const user = await getOrCreateUser(BigInt(ctx.from.id)); const reminder = await getOwnedReminder(user.id, id);
-  if (!reminder) { await ctx.editMessageText("Напоминание не найдено или уже удалено/отправлено.", { reply_markup: remindersMenuKeyboard }); return; }
-  const reminders = await listReminders(user.id); const number = getReminderNumber(reminders, id);
-  if (number === null) { await ctx.editMessageText("Напоминание не найдено.", { reply_markup: remindersMenuKeyboard }); return; }
-  await ctx.editMessageText(`Удалить напоминание #${number}?`, { reply_markup: confirmDeleteKeyboard("reminder", id) });
+  await ctx.answerCallbackQuery();
+  const id = Number(ctx.match[1]);
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const reminder = await getOwnedReminder(user.id, id);
+  if (!reminder) {
+    await ctx.editMessageText("Напоминание не найдено или уже удалено/отправлено.", { reply_markup: remindersMenuKeyboard });
+    return;
+  }
+
+  const group = await getReminderGroup(user.id, id);
+  const first = group[0]!;
+  const title = first.voiceFileId ? "🎙️ Голосовое сообщение" : first.text;
+  const details = first.repeatGroupId
+    ? `🔁 ${title}\n${repeatLabel(first.repeatRule)}\nКоличество будущих срабатываний: ${group.length}\nСледующее: ${formatLocalDateTime(first.dueAt, user.timezone)}`
+    : `⏰ ${formatLocalDateTime(first.dueAt, user.timezone)}\n${title}`;
+
+  await ctx.editMessageText(`${details}\n\nВыберите действие:`, { reply_markup: reminderManageKeyboard(id) });
+});
+
+remindersComposer.callbackQuery(/^reminders:manage:(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const id = Number(ctx.match[1]);
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const reminder = await getOwnedReminder(user.id, id);
+  if (!reminder) {
+    await ctx.editMessageText("Напоминание не найдено.", { reply_markup: remindersMenuKeyboard });
+    return;
+  }
+  const group = await getReminderGroup(user.id, id);
+  const first = group[0]!;
+  const title = first.voiceFileId ? "🎙️ Голосовое сообщение" : first.text;
+  await ctx.editMessageText(
+    `${first.repeatGroupId ? "🔁" : "⏰"} ${title}\n${first.repeatGroupId ? `${repeatLabel(first.repeatRule)} · ${group.length} срабатываний\nСледующее: ${formatLocalDateTime(first.dueAt, user.timezone)}` : formatLocalDateTime(first.dueAt, user.timezone)}\n\nВыберите действие:`,
+    { reply_markup: reminderManageKeyboard(id) },
+  );
+});
+
+remindersComposer.callbackQuery(/^reminders:delete_all:(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const count = await deleteReminderGroup(user.id, Number(ctx.match[1]));
+  await ctx.editMessageText(count ? `🗑 Удалено напоминаний: ${count}.` : "Напоминание не найдено.", { reply_markup: remindersMenuKeyboard });
+});
+
+remindersComposer.callbackQuery(/^reminders:delete_one_mode:(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const group = await getReminderGroup(user.id, Number(ctx.match[1]));
+  if (!group.length) {
+    await ctx.editMessageText("Напоминание не найдено.", { reply_markup: remindersMenuKeyboard });
+    return;
+  }
+  if (group.length === 1) {
+    await ctx.editMessageText("У этого напоминания нет повторов. Можно удалить его полностью.", { reply_markup: reminderManageKeyboard(group[0]!.id) });
+    return;
+  }
+  const lines = group.map((item, index) => `#${index + 1} — ${formatLocalDateTime(item.dueAt, user.timezone)} — ${item.voiceFileId ? "🎙️ Голосовое сообщение" : item.text}`).join("\n");
+  await ctx.editMessageText(
+    `❌ Выберите одно напоминание для удаления:\n\n${lines}`,
+    { reply_markup: reminderInstanceSelectionKeyboard(group.map((item) => item.id)) },
+  );
+});
+
+remindersComposer.callbackQuery(/^reminders:delete_one:(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const reminder = await getOwnedReminder(user.id, Number(ctx.match[1]));
+  if (!reminder) {
+    await ctx.editMessageText("Напоминание не найдено.", { reply_markup: remindersMenuKeyboard });
+    return;
+  }
+  await ctx.editMessageText(
+    `Удалить одно напоминание?\n\n${formatLocalDateTime(reminder.dueAt, user.timezone)}\n${reminder.voiceFileId ? "🎙️ Голосовое сообщение" : reminder.text}`,
+    { reply_markup: confirmDeleteKeyboard("reminder", reminder.id) },
+  );
+});
+
+remindersComposer.callbackQuery(/^reminders:edit_mode:(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const id = Number(ctx.match[1]);
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const reminder = await getOwnedReminder(user.id, id);
+  if (!reminder) {
+    await ctx.editMessageText("Напоминание не найдено.", { reply_markup: remindersMenuKeyboard });
+    return;
+  }
+  await ctx.editMessageText("✏️ Что именно изменить?", { reply_markup: reminderEditFieldKeyboard(id) });
+});
+
+remindersComposer.callbackQuery(/^reminders:edit_field:(date|time|text):(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const mode = ctx.match[1] as "date" | "time" | "text";
+  const id = Number(ctx.match[2]);
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const reminder = await getOwnedReminder(user.id, id);
+  if (!reminder) {
+    await ctx.editMessageText("Напоминание не найдено.", { reply_markup: remindersMenuKeyboard });
+    return;
+  }
+  const prompts = {
+    date: "Введите новую дату первой точки серии в формате DD.MM.YYYY:",
+    time: "Введите новое время в формате HH:mm:",
+    text: "Введите новый текст напоминания:",
+  };
+  await setSessionStep(user.id, SessionStep.REMINDER_AWAITING_DATETIME, { editMode: mode, editReminderId: id });
+  await ctx.editMessageText(prompts[mode], { reply_markup: cancelKeyboard });
 });
 
 remindersComposer.command("cancelreminder", async (ctx) => {
@@ -142,15 +272,65 @@ remindersComposer.command("cancelreminder", async (ctx) => {
 });
 
 remindersComposer.callbackQuery(/^reminders:delete_confirm:(\d+)$/, async (ctx) => {
-  await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); const deleted = await deleteReminder(user.id, Number(ctx.match[1]));
+  await ctx.answerCallbackQuery();
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const deleted = await deleteReminder(user.id, Number(ctx.match[1]));
   await ctx.editMessageText(deleted ? "🗑 Напоминание удалено." : "Напоминание не найдено или уже отправлено.", { reply_markup: remindersMenuKeyboard });
 });
 
 remindersComposer.callbackQuery("session:cancel", async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); await clearSession(user.id); await ctx.editMessageText("Отменено.", { reply_markup: remindersMenuKeyboard }); });
 
+async function handleReminderEditInput(ctx: any, userId: number, text: string, draft: ReminderDraft): Promise<boolean> {
+  if (!draft.editMode || !draft.editReminderId) return false;
+  const id = draft.editReminderId;
+  const user = await getOrCreateUser(BigInt(ctx.from!.id));
+
+  try {
+    if (draft.editMode === "text") {
+      await updateReminderGroup(userId, id, { text });
+      await clearSession(userId);
+      await ctx.reply("✅ Текст напоминания обновлён для всей серии.", { reply_markup: remindersMenuKeyboard });
+      return true;
+    }
+
+    const { DateTime } = await import("luxon");
+    const group = await getReminderGroup(userId, id);
+    if (!group.length) {
+      await clearSession(userId);
+      await ctx.reply("Напоминание не найдено.", { reply_markup: remindersMenuKeyboard });
+      return true;
+    }
+
+    let newFirst: Date;
+    if (draft.editMode === "date") {
+      const parsed = DateTime.fromFormat(text.trim(), "dd.MM.yyyy", { zone: user.timezone });
+      if (!parsed.isValid) throw new ValidationError("Неверная дата. Используйте DD.MM.YYYY.");
+      const current = DateTime.fromJSDate(group[0]!.dueAt, { zone: user.timezone });
+      newFirst = parsed.set({ hour: current.hour, minute: current.minute, second: current.second, millisecond: 0 }).toJSDate();
+    } else {
+      const parsed = DateTime.fromFormat(text.trim(), "HH:mm", { zone: user.timezone });
+      if (!parsed.isValid) throw new ValidationError("Неверное время. Используйте HH:mm.");
+      const current = DateTime.fromJSDate(group[0]!.dueAt, { zone: user.timezone });
+      newFirst = current.set({ hour: parsed.hour, minute: parsed.minute, second: 0, millisecond: 0 }).toJSDate();
+    }
+
+    await updateReminderGroup(userId, id, { dueAt: newFirst });
+    await clearSession(userId);
+    await ctx.reply("✅ Изменение применено ко всей серии напоминаний.", { reply_markup: remindersMenuKeyboard });
+  } catch (err) {
+    if (err instanceof ValidationError) await ctx.reply(`⚠️ ${err.message}`, { reply_markup: cancelKeyboard });
+    else throw err;
+  }
+  return true;
+}
+
 export async function handleReminderTextInput(ctx: any, userId: number): Promise<boolean> {
   const session = await getSession(userId); if (!session) return false;
   const text = ctx.message?.text as string | undefined; if (!text) return false;
+  const draft = (session.draft as ReminderDraft | null) ?? {};
+  if (session.step === SessionStep.REMINDER_AWAITING_DATETIME && draft.editMode) {
+    return handleReminderEditInput(ctx, userId, text.trim(), draft);
+  }
   if (session.step === SessionStep.REMINDER_AWAITING_TEXT) {
     try { const trimmed = text.trim(); if (!trimmed) throw new ValidationError("Текст напоминания не может быть пустым."); if (trimmed.length > 1000) throw new ValidationError("Слишком длинный текст (максимум 1000 символов)."); await setSessionStep(userId, SessionStep.REMINDER_AWAITING_DATETIME, { text: trimmed }); await ctx.reply("Введите дату и время в формате DD.MM.YYYY HH:mm:", { reply_markup: cancelKeyboard }); }
     catch (err) { if (err instanceof ValidationError) await ctx.reply(`⚠️ ${err.message}\nПопробуйте ещё раз:`, { reply_markup: cancelKeyboard }); else throw err; }
