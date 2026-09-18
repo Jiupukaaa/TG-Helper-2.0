@@ -35,6 +35,37 @@ export function notesDeleteSelectionKeyboard(noteIds: number[]): InlineKeyboard 
 export function remindersDeleteSelectionKeyboard(reminderIds: number[]): InlineKeyboard { const keyboard = new InlineKeyboard(); reminderIds.forEach((id, index) => { keyboard.text(`#${index + 1}`, `reminders:delete_select:${id}`); if (index % 2 === 1) keyboard.row(); }); if (reminderIds.length % 2 === 1) keyboard.row(); return keyboard.text("⬅️ К списку", "reminders:list"); }
 export function noteItemKeyboard(noteId: number, isVoice = false): InlineKeyboard { const keyboard = new InlineKeyboard().text("✏️ Изменить", `notes:edit:${noteId}`); if (isVoice) keyboard.row().text("🎙️ Отправить голосовое", `notes:voice:${noteId}`); return keyboard.row().text("⬅️ К списку", "notes:list"); }
 export function notePaginationKeyboard(noteId: number, page: number, totalPages: number, isVoice = false): InlineKeyboard { const keyboard = new InlineKeyboard(); if (page > 0) keyboard.text("⬅️", `notes:page:${noteId}:${page - 1}`); if (page < totalPages - 1) keyboard.text("➡️", `notes:page:${noteId}:${page + 1}`); keyboard.row().text("✏️ Изменить", `notes:edit:${noteId}`); if (isVoice) keyboard.row().text("🎙️ Отправить голосовое", `notes:voice:${noteId}`); return keyboard.row().text("⬅️ К списку", "notes:list"); }
-export function reminderItemKeyboard(reminderId: number): InlineKeyboard { return new InlineKeyboard().text("⬅️ К списку", "reminders:list"); }
+export function reminderManageKeyboard(reminderId: number): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("🗑 Удалить напоминание полностью", `reminders:delete_all:${reminderId}`)
+    .row()
+    .text("❌ Удалить одно напоминание", `reminders:delete_one_mode:${reminderId}`)
+    .row()
+    .text("✏️ Изменить", `reminders:edit_mode:${reminderId}`)
+    .row()
+    .text("⬅️ К списку", "reminders:list");
+}
+
+export function reminderInstanceSelectionKeyboard(reminderIds: number[]): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  reminderIds.forEach((id, index) => {
+    keyboard.text(`#${index + 1}`, `reminders:delete_one:${id}`);
+    if (index % 2 === 1) keyboard.row();
+  });
+  if (reminderIds.length % 2 === 1) keyboard.row();
+  return keyboard.text("⬅️ Назад", "reminders:delete_mode");
+}
+
+export function reminderEditFieldKeyboard(reminderId: number): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("📅 Дата", `reminders:edit_field:date:${reminderId}`)
+    .text("⏰ Время", `reminders:edit_field:time:${reminderId}`)
+    .row()
+    .text("📝 Текст", `reminders:edit_field:text:${reminderId}`)
+    .row()
+    .text("⬅️ Назад", `reminders:manage:${reminderId}`);
+}
+
+export function reminderItemKeyboard(reminderId: number): InlineKeyboard { return reminderManageKeyboard(reminderId); }
 export const cancelKeyboard = new InlineKeyboard().text("❌ Отмена", "session:cancel");
 export function confirmDeleteKeyboard(kind: "note" | "reminder", id: number): InlineKeyboard { return new InlineKeyboard().text("✅ Да, удалить", `${kind}s:delete_confirm:${id}`).text("❌ Отмена", kind === "note" ? "notes:list" : "reminders:list"); }
