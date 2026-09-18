@@ -10,7 +10,15 @@ import { remindersMenuKeyboard, remindersListKeyboard, remindersDeleteSelectionK
 export const remindersComposer = new Composer();
 
 type RepeatRule = "daily" | "weekly" | "monthly";
-type ReminderDraft = { text?: string; voiceFileId?: string; awaitingRepeatCount?: boolean; repeatRule?: RepeatRule; dueAt?: string };
+type ReminderDraft = {
+  text?: string;
+  voiceFileId?: string;
+  awaitingRepeatCount?: boolean;
+  repeatRule?: RepeatRule;
+  dueAt?: string;
+  editMode?: "date" | "time" | "text";
+  editReminderId?: number;
+};
 
 type ReminderListItem = {
   id: number;
