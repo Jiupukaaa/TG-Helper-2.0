@@ -15,7 +15,9 @@
     "d1:migrate:local": "wrangler d1 migrations apply tg-helper-db --local",
     "d1:migrate:remote": "wrangler d1 migrations apply tg-helper-db --remote",
     "postinstall": "prisma generate",
-    "cf:cron:deploy": "wrangler deploy --config cloudflare/wrangler.cron.jsonc"
+    "cf:cron:deploy": "wrangler deploy --config cloudflare/wrangler.cron.jsonc",
+    "data:export-neon": "node scripts/export-neon.mjs",
+    "data:prepare-d1-import": "node scripts/prepare-d1-import.mjs"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.11.0",
@@ -35,7 +37,8 @@
     "@types/react-dom": "^18.3.0",
     "prisma": "^6.19.0",
     "typescript": "^5.5.4",
-    "wrangler": "^4.45.0"
+    "wrangler": "^4.45.0",
+    "pg": "^8.16.3"
   },
   "engines": {
     "node": ">=20.0.0"
