@@ -1,0 +1,33 @@
+name: Cloudflare migration checks
+
+on:
+  push:
+    branches:
+      - feat/cloudflare
+  pull_request:
+    branches:
+      - feat/cloudflare
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Validate Prisma schema
+        run: npx prisma validate
+      - name: Type-check
+        run: npx tsc --noEmit
+      - name: Build Cloudflare Worker
+        run: npm run cf:build
