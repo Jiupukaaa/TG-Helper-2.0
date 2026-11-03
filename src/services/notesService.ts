@@ -1,4 +1,4 @@
-import { all, first, run } from "@/db/client";
+import { all, first } from "@/db/client";
 import type { Note } from "@/db/types";
 
 const MAX_NOTE_LENGTH = 4000; // Telegram message limit is 4096; leave headroom for formatting.
