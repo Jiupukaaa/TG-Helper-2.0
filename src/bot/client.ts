@@ -1,9 +1,7 @@
 import { Bot } from "grammy";
 import { env } from "@/lib/env";
 
-// Single Bot instance reused across the webhook handler and the cron
-// handler (the cron endpoint needs it to push reminder messages proactively,
-// outside of any incoming update).
+// Single Bot instance reused by webhook updates and the Worker's scheduled event.
 let botInstance: Bot | undefined;
 
 export function getBot(): Bot {
