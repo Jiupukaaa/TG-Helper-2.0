@@ -8,6 +8,7 @@
 - The same Worker exports `scheduled()`; Wrangler triggers it every five minutes.
 - D1 is bound as `env.DB`. All runtime persistence uses prepared SQL statements in `src/db/client.ts`; no Prisma client or Node.js compatibility flag is required.
 - Multi-statement writes use `DB.batch()` so D1 rolls back the whole operation if a statement fails.
+- `webhook_dedup` is an internal D1 ledger for Telegram `update_id` idempotency. It is not part of the six-table Neon data import and is cleaned up after seven days.
 
 ## Local setup
 
