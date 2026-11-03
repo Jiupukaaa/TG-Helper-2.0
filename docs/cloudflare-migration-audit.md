@@ -35,7 +35,7 @@
 - [x] Prisma and Next.js dependencies removed from `package.json`; legacy wrapper files are retired or excluded.
 - [x] CI workflow added for TypeScript checking and Wrangler dry-run bundling.
 - [ ] Type-check and Worker dry-run results still need verification.
-- [x] D1 migration SQL, user upsert, session JSON, note/saved-item inserts, shift reminder CTE, claim idempotency, batch rollback, cascade delete, and foreign-key checks passed manual SQLite smoke checks in an isolated local database.
+- [x] D1 migration SQL, user upsert, session JSON, note/saved-item inserts, 366-day shift-cycle CTE batches (42 statements, at most 95 bound parameters each), claim idempotency, batch rollback, cascade delete, and foreign-key checks passed manual SQLite smoke checks in an isolated local database.
 - [ ] Wrangler local D1 migration and Worker runtime tests still need to run.
 - [ ] Neon data export/import, row-count reconciliation, and foreign-key validation remain outstanding.
 - [ ] No Cloudflare database has been created or migrated remotely; no production webhook has been switched.
