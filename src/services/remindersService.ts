@@ -79,6 +79,12 @@ export async function createReminder(ownerId: number, text: string, dueAt: Date,
   return mapReminder(rows[0]);
 }
 
+function chunks<T>(items: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < items.length; i += size) result.push(items.slice(i, i + size));
+  return result;
+}
+
 function legacyRepeatRule(previous: Date, current: Date): "daily" | "weekly" | null {
   const diffHours = (current.getTime() - previous.getTime()) / 3600000;
   if (Math.abs(diffHours - 24) < 0.01) return "daily";
@@ -182,12 +188,15 @@ export async function getReminderGroup(ownerId: number, reminderId: number): Pro
 export async function deleteReminderGroup(ownerId: number, reminderId: number): Promise<number> {
   const group = await getReminderGroup(ownerId, reminderId);
   if (!group.length) return 0;
-  const placeholders = group.map(() => "?").join(", ");
-  const result = await run(
-    `DELETE FROM reminders WHERE ownerId = ? AND shiftId IS NULL AND id IN (${placeholders})`,
-    ownerId, ...group.map((item) => item.id),
-  );
-  return result.meta.changes;
+  const statements = chunks(group, 99).map((items) => {
+    const placeholders = items.map(() => "?").join(", ");
+    return statement(
+      `DELETE FROM reminders WHERE ownerId = ? AND shiftId IS NULL AND id IN (${placeholders})`,
+      ownerId, ...items.map((item) => item.id),
+    );
+  });
+  const results = await batch(statements);
+  return results.reduce((count, result) => count + result.meta.changes, 0);
 }
 
 export async function updateReminderGroup(
@@ -201,11 +210,16 @@ export async function updateReminderGroup(
 
   if (changes.text !== undefined) {
     const text = validateReminderText(changes.text);
-    const result = await run(
-      `UPDATE reminders SET text = ?, updatedAt = ? WHERE ownerId = ? AND shiftId IS NULL AND id IN (${placeholders})`,
-      text, new Date().toISOString(), ownerId, ...group.map((item) => item.id),
-    );
-    return result.meta.changes;
+    const now = new Date().toISOString();
+    const statements = chunks(group, 97).map((items) => {
+      const ids = items.map(() => "?").join(", ");
+      return statement(
+        `UPDATE reminders SET text = ?, updatedAt = ? WHERE ownerId = ? AND shiftId IS NULL AND id IN (${ids})`,
+        text, now, ownerId, ...items.map((item) => item.id),
+      );
+    });
+    const results = await batch(statements);
+    return results.reduce((count, result) => count + result.meta.changes, 0);
   }
 
   if (changes.dueAt !== undefined) {
