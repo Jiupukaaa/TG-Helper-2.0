@@ -7,8 +7,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
-    "db:migrate:local": "wrangler d1 migrations apply tg-helper-db --local",
-    "db:migrate:remote": "wrangler d1 migrations apply tg-helper-db --remote"
+    "db:migrate:local": "wrangler d1 migrations apply tg-helper --local",
+    "db:migrate:remote": "wrangler d1 migrations apply tg-helper --remote"
   },
   "dependencies": {
     "grammy": "^1.30.0",
