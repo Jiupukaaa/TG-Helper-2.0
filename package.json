@@ -2,45 +2,22 @@
   "name": "tg-helper",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "tsc --noEmit",
-    "prisma:generate": "prisma generate",
-    "prisma:studio": "prisma studio",
-    "cf:build": "opennextjs-cloudflare build",
-    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-    "d1:migrate:local": "wrangler d1 migrations apply tg-helper-db --local",
-    "d1:migrate:remote": "wrangler d1 migrations apply tg-helper-db --remote",
-    "postinstall": "prisma generate",
-    "cf:cron:deploy": "wrangler deploy --config cloudflare/wrangler.cron.jsonc",
-    "data:export-neon": "node scripts/export-neon.mjs",
-    "data:prepare-d1-import": "node scripts/prepare-d1-import.mjs"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "db:migrate:local": "wrangler d1 migrations apply tg-helper-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply tg-helper-db --remote"
   },
   "dependencies": {
-    "@opennextjs/cloudflare": "^1.20.15",
-    "@prisma/adapter-d1": "^6.19.0",
-    "@prisma/client": "^6.19.0",
     "grammy": "^1.30.0",
-    "luxon": "^3.5.0",
-    "next": "16.4.4",
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "luxon": "^3.5.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261101.1",
     "@types/luxon": "^3.4.2",
-    "@types/node": "^20.14.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "prisma": "^6.19.0",
     "typescript": "^5.5.4",
-    "wrangler": "^4.148.0",
-    "pg": "^8.16.3"
-  },
-  "engines": {
-    "node": ">=20.9.0 <25"
+    "wrangler": "^4.148.0"
   }
 }
