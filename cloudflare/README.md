@@ -33,7 +33,7 @@
 
 ## Cloudflare configuration
 
-Create or select the intended D1 database, then replace the all-zero `database_id` in `wrangler.jsonc`. Configure these Worker secrets in Cloudflare:
+Create the intended D1 database with `npx wrangler d1 create tg-helper` (or select an existing empty target), then replace the all-zero `database_id` in `wrangler.jsonc` with the returned ID. Configure these Worker secrets in Cloudflare:
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_WEBHOOK_SECRET`
@@ -41,14 +41,14 @@ Create or select the intended D1 database, then replace the all-zero `database_i
 
 Configure `ALLOWED_TELEGRAM_IDS` as a Worker variable containing comma-separated numeric Telegram user IDs. An empty allowlist denies all users.
 
-Only after a backup and verified data import, apply the D1 migration remotely and deploy:
+Set the secrets using the Cloudflare dashboard or `npx wrangler secret put <SECRET_NAME>`. Set `ALLOWED_TELEGRAM_IDS` as a non-secret Worker variable. Only after a backup and verified data import, apply the D1 migration remotely and deploy:
 
 ```powershell
 npm run db:migrate:remote
 npm run deploy
 ```
 
-The scheduled trigger is in the same Worker configuration. There is no separate cron Worker.
+The scheduled trigger is in the same Worker configuration. There is no separate cron Worker. After deployment and smoke tests, register Telegram's webhook at `https://<worker-host>/telegram` with `secret_token` set to the exact `TELEGRAM_WEBHOOK_SECRET` value. Do not change the production webhook before the data-import and rollback gates above are complete.
 
 ## Data migration and cutover safety
 
