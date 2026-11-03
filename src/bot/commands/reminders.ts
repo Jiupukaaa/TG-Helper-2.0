@@ -1,6 +1,6 @@
 import { Composer, InlineKeyboard } from "grammy";
 import { SessionStep } from "@/db/types";
-import { getOrCreateUser, setSessionStep, clearSession, getSession, updateUserTimezone } from "@/bot/session";
+import { getOrCreateUser, setSessionStep, clearSession, getSession, updateUserTimezone, type SessionDraft } from "@/bot/session";
 import { createReminder, listReminders, deleteReminder, deleteReminderGroup, getReminderGroup, updateReminderGroup, getOwnedReminder, ValidationError } from "@/services/remindersService";
 import { VOICE_NOTE_TEXT } from "@/services/notesService";
 import { parseLocalDateTime, formatLocalDateTime, DEFAULT_TIMEZONE, isValidTimezone } from "@/lib/time";
@@ -395,7 +395,7 @@ export async function handleReminderTextInput(ctx: any, userId: number): Promise
     try {
       const user = await getOrCreateUser(BigInt(ctx.from!.id)); const dueAt = parseLocalDateTime(text.trim(), user.timezone);
       if (!dueAt) throw new ValidationError("Неверный формат даты и времени. Используйте DD.MM.YYYY HH:mm.");
-      await setSessionStep(userId, SessionStep.REMINDER_AWAITING_DATETIME, { ...(session.draft as any), dueAt: dueAt.toISOString() });
+      await setSessionStep(userId, SessionStep.REMINDER_AWAITING_DATETIME, { ...(session.draft as SessionDraft), dueAt: dueAt.toISOString() });
       await ctx.reply("🔁 Нужно повторять это напоминание?", { reply_markup: repeatKeyboard() });
     } catch (err) { if (err instanceof ValidationError) await ctx.reply(`⚠️ ${err.message}\nВведите другую дату и время:`, { reply_markup: cancelKeyboard }); else throw err; }
     return true;
