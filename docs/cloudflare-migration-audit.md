@@ -23,7 +23,7 @@
 - The same Worker handles `scheduled()` every five minutes and an optional authenticated `POST /internal/run-reminders` endpoint.
 - D1 binding `DB`; prepared SQL statements and `DB.batch()` replace Prisma in runtime.
 - No Next.js runtime, OpenNext adapter, Prisma client, separate cron Worker, or `nodejs_compat` flag.
-- D1 schema is defined in `cloudflare/migrations/0001_initial.sql`.
+- The six imported application tables are defined in `cloudflare/migrations/0001_initial.sql`; `0002_webhook_dedup.sql` adds a Worker-owned idempotency ledger outside the Neon import.
 
 ## Current branch progress
 
