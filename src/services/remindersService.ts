@@ -206,8 +206,6 @@ export async function updateReminderGroup(
 ): Promise<number> {
   const group = await getReminderGroup(ownerId, reminderId);
   if (!group.length) return 0;
-  const placeholders = group.map(() => "?").join(", ");
-
   if (changes.text !== undefined) {
     const text = validateReminderText(changes.text);
     const now = new Date().toISOString();
