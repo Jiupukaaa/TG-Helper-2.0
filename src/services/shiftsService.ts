@@ -106,12 +106,15 @@ async function createShiftsAtomic(
   }
 
   await batch(statements);
-  const placeholders = startAts.map(() => "?").join(", ");
-  const rows = await all<ShiftRow>(
-    `SELECT * FROM shifts WHERE ownerId = ? AND startAt IN (${placeholders}) ORDER BY startAt ASC`,
-    ownerId, ...startAts.map((startAt) => startAt.toISOString()),
-  );
-  return rows.map(mapShift);
+  const rows: ShiftRow[] = [];
+  for (const group of chunks(startAts, 99)) {
+    const placeholders = group.map(() => "?").join(", ");
+    rows.push(...await all<ShiftRow>(
+      `SELECT * FROM shifts WHERE ownerId = ? AND startAt IN (${placeholders}) ORDER BY startAt ASC`,
+      ownerId, ...group.map((startAt) => startAt.toISOString()),
+    ));
+  }
+  return rows.map(mapShift).sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
 }
 
 export async function createShift(ownerId: number, startAt: Date, timezone: string, name?: string | null): Promise<Shift> {
