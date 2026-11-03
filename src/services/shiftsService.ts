@@ -74,14 +74,10 @@ async function createShiftsAtomic(
   cycleGroupId: string | null,
 ): Promise<Shift[]> {
   const now = new Date().toISOString();
-  const shiftValues = startAts.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
-  const shiftParams = startAts.flatMap((startAt) => [name, startAt.toISOString(), ownerId, cycleGroupId, now, now]);
-  const statements = [
-    statement(
-      `INSERT INTO shifts (name, startAt, ownerId, cycleGroupId, createdAt, updatedAt) VALUES ${shiftValues}`,
-      ...shiftParams,
-    ),
-  ];
+  const statements = startAts.map((startAt) => statement(
+    "INSERT INTO shifts (name, startAt, ownerId, cycleGroupId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)",
+    name, startAt.toISOString(), ownerId, cycleGroupId, now, now,
+  ));
 
   const reminderRows = startAts.flatMap((startAt) =>
     futureShiftReminderData(ownerId, startAt, timezone, name).map((reminder) => ({
