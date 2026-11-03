@@ -4,32 +4,41 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma migrate deploy && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
+    "cf:build": "opennextjs-cloudflare build",
+    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "d1:migrate:local": "wrangler d1 migrations apply tg-helper-db --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply tg-helper-db --remote",
     "postinstall": "prisma generate"
   },
   "dependencies": {
-    "@prisma/client": "^5.20.0",
+    "@opennextjs/cloudflare": "^1.11.0",
+    "@prisma/adapter-d1": "^6.19.0",
+    "@prisma/client": "^6.19.0",
     "grammy": "^1.30.0",
     "luxon": "^3.5.0",
-    "next": "14.2.5",
+    "next": "14.2.35",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20261103.0",
     "@types/luxon": "^3.4.2",
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "prisma": "^5.20.0",
-    "typescript": "^5.5.4"
+    "prisma": "^6.19.0",
+    "typescript": "^5.5.4",
+    "wrangler": "^4.45.0"
   },
   "engines": {
-    "node": ">=18.18.0"
+    "node": ">=20.0.0"
   }
 }
