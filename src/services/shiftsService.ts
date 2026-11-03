@@ -93,7 +93,7 @@ async function createShiftsAtomic(
       futureShiftReminderData(ownerId, startAt, timezone, name)
         .map((reminder) => [reminder.offsetMinutes, reminder] as const),
     );
-    const get = (offset: number) => {
+    const get = (offset: (typeof SHIFT_REMINDER_OFFSETS)[number]) => {
       const reminder = reminders.get(offset);
       return reminder ? { text: reminder.text, dueAt: reminder.dueAt.toISOString() } : { text: null, dueAt: null };
     };
