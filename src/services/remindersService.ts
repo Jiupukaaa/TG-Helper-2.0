@@ -191,21 +191,30 @@ export async function updateReminderGroup(
 }
 
 export async function claimDueReminders(limit = 50) {
-  const stuckThreshold = new Date(Date.now() - STUCK_PROCESSING_MINUTES * 60 * 1000);
-  const claimed = await prisma.$queryRaw<{ id: number }[]>`
-    WITH candidates AS (
-      SELECT id FROM "reminders"
-      WHERE (status = 'PENDING' AND "dueAt" <= now())
-         OR (status = 'PROCESSING' AND "processingStartedAt" < ${stuckThreshold})
-      ORDER BY "dueAt" ASC
-      LIMIT ${limit}
-      FOR UPDATE SKIP LOCKED
-    )
-    UPDATE "reminders"
-    SET status = 'PROCESSING', "processingStartedAt" = now()
-    WHERE id IN (SELECT id FROM candidates)
-    RETURNING id
-  `;
+  const now = new Date();
+  const stuckThreshold = new Date(now.getTime() - STUCK_PROCESSING_MINUTES * 60 * 1000);
+  const candidates = await prisma.reminder.findMany({
+    where: {
+      OR: [
+        { status: ReminderStatus.PENDING, dueAt: { lte: now } },
+        { status: ReminderStatus.PROCESSING, processingStartedAt: { lt: stuckThreshold } },
+      ],
+    },
+    orderBy: { dueAt: "asc" },
+    take: limit,
+    select: { id: true, status: true },
+  });
+  const claimedIds: number[] = [];
+  for (const candidate of candidates) {
+    const result = await prisma.reminder.updateMany({
+      where: candidate.status === ReminderStatus.PENDING
+        ? { id: candidate.id, status: ReminderStatus.PENDING, dueAt: { lte: now } }
+        : { id: candidate.id, status: ReminderStatus.PROCESSING, processingStartedAt: { lt: stuckThreshold } },
+      data: { status: ReminderStatus.PROCESSING, processingStartedAt: now },
+    });
+    if (result.count === 1) claimedIds.push(candidate.id);
+  }
+  const claimed = claimedIds.map((id) => ({ id }));
   if (claimed.length === 0) return [];
   return prisma.reminder.findMany({ where: { id: { in: claimed.map((c) => c.id) } }, include: { owner: true } });
 }
