@@ -1,18 +1,23 @@
-// Central place to read and validate environment variables.
-// Never log secret values. On Cloudflare, configure these values as Worker
-// variables/secrets; the D1 database is provided separately through binding DB.
-
-function required(name: string): string {
-  const value = process.env[name];
-  if (!value || value.trim() === "") {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-  return value;
+export interface RuntimeEnv {
+  DB: D1Database;
+  TELEGRAM_BOT_TOKEN: string;
+  TELEGRAM_WEBHOOK_SECRET: string;
+  CRON_SECRET: string;
+  ALLOWED_TELEGRAM_IDS?: string;
 }
 
-function optional(name: string, fallback: string): string {
-  const value = process.env[name];
-  return value && value.trim() !== "" ? value : fallback;
+let currentEnv: RuntimeEnv | undefined;
+
+export function setRuntimeEnv(value: RuntimeEnv): void {
+  currentEnv = value;
+}
+
+function required(name: "TELEGRAM_BOT_TOKEN" | "TELEGRAM_WEBHOOK_SECRET" | "CRON_SECRET"): string {
+  const value = currentEnv?.[name];
+  if (!value || value.trim() === "") {
+    throw new Error("Missing required Worker secret: " + name);
+  }
+  return value;
 }
 
 export const env = {
@@ -26,21 +31,13 @@ export const env = {
     return required("CRON_SECRET");
   },
   get ALLOWED_TELEGRAM_IDS(): bigint[] {
-    const raw = optional("ALLOWED_TELEGRAM_IDS", "");
+    const raw = currentEnv?.ALLOWED_TELEGRAM_IDS?.trim() ?? "";
     if (raw === "") return [];
-    return raw
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0)
-      .map((s) => BigInt(s));
+    return raw.split(",").map((value) => value.trim()).filter(Boolean).map((value) => BigInt(value));
   },
 };
 
 export function isAllowedTelegramId(id: bigint): boolean {
   const allowed = env.ALLOWED_TELEGRAM_IDS;
-  // If the allowlist is empty, deny everyone by default rather than
-  // silently allowing anyone — an unconfigured allowlist should not mean
-  // "public bot".
-  if (allowed.length === 0) return false;
-  return allowed.includes(id);
+  return allowed.length > 0 && allowed.includes(id);
 }
