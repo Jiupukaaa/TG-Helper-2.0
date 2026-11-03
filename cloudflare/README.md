@@ -1,70 +1,66 @@
-# Cloudflare migration workspace
+# TG Helper 2.0 — native Cloudflare Worker migration
 
-This directory is the isolated Cloudflare migration workspace for TG Helper 2.0.
+## Architecture
 
-## Status
+- One module Worker entry point: `src/index.ts`.
+- `GET /` and `GET /health` are health checks.
+- `POST /telegram` validates Telegram's `X-Telegram-Bot-Api-Secret-Token` before handing the request to grammY's `cloudflare-mod` adapter.
+- The same Worker exports `scheduled()`; Wrangler triggers it every five minutes.
+- D1 is bound as `env.DB`. All runtime persistence uses prepared SQL statements in `src/db/client.ts`; no Prisma client or Node.js compatibility flag is required.
+- Multi-statement writes use `DB.batch()` so D1 rolls back the whole operation if a statement fails.
 
-- [x] Migration branch `feat/cloudflare` created from `main`.
-- [x] Initial audit committed.
-- [x] D1 schema migration authored from the current Prisma models.
-- [x] Prisma schema switched to SQLite and D1 adapter added.
-- [x] Reminder claim logic adapted to SQLite-compatible conditional updates.
-- [x] Shift writes no longer rely on interactive Prisma transactions; compensating operations are used.
-- [x] OpenNext and a separate five-minute cron Worker scaffolded.
-- [x] GitHub Actions checks added for Prisma validation, TypeScript, and the Cloudflare build.
-- [ ] CI/build results not yet inspected; no local build has been run in this environment.
-- [ ] D1 database has not been created or migrated remotely.
-- [ ] Neon data export/import and reconciliation have not been run.
-- [ ] Worker has not been deployed; Telegram webhook and production traffic have not been changed.
+## Local setup
 
-## Important safety boundary
+1. Install dependencies with Node.js 22 or newer.
+2. Create a local `.dev.vars` file (ignored by Git) containing:
+   ```dotenv
+   TELEGRAM_BOT_TOKEN=your-test-bot-token
+   TELEGRAM_WEBHOOK_SECRET=your-local-webhook-secret
+   CRON_SECRET=your-local-cron-secret
+   ALLOWED_TELEGRAM_IDS=123456789
+   ```
+3. Keep the placeholder `database_id` in `wrangler.jsonc` for local development. Replace it with the actual D1 database ID before any remote migration or deployment.
+4. Apply the schema locally:
+   ```powershell
+   npm run db:migrate:local
+   ```
+5. Type-check and start the Worker:
+   ```powershell
+   npm run typecheck
+   npm run dev
+   ```
 
-The SQL migration creates an empty D1 schema. It does not copy data from Neon. Do not point the production bot at D1 until the import is complete and verified. Keep the existing Vercel/Neon deployment available during testing and for at least seven stable days after a verified cutover.
+## Cloudflare configuration
 
-## Framework/runtime compatibility
+Create or select the intended D1 database, then replace the all-zero `database_id` in `wrangler.jsonc`. Configure these Worker secrets in Cloudflare:
 
-The source app originally used Next.js 14.2.5 and Prisma 5/PostgreSQL. This branch updates the project to Next.js 14.2.35, Prisma 6.19, `@prisma/adapter-d1`, and the OpenNext Cloudflare adapter. Current Cloudflare guidance says Next.js 14 support has ended; this is a known compatibility risk and must be resolved before production deployment, either by verifying the existing adapter build or migrating to the current supported Cloudflare Next.js path.
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_WEBHOOK_SECRET`
+- `CRON_SECRET`
 
-## D1 schema
+Configure `ALLOWED_TELEGRAM_IDS` as a Worker variable containing comma-separated numeric Telegram user IDs. An empty allowlist denies all users.
 
-Apply locally after dependencies are installed:
+Only after a backup and verified data import, apply the D1 migration remotely and deploy:
 
 ```powershell
-npm run d1:migrate:local
+npm run db:migrate:remote
+npm run deploy
 ```
 
-After creating the D1 database in the intended Cloudflare account and replacing the placeholder `database_id` in `wrangler.jsonc`, apply remotely only when ready:
+The scheduled trigger is in the same Worker configuration. There is no separate cron Worker.
 
-```powershell
-npm run d1:migrate:remote
-```
+## Data migration and cutover safety
 
-The remote command changes the Cloudflare database. Do not run it until the target account/database and backup/import plan are confirmed.
+The migration branch must not be pointed at production traffic until the existing Neon data is imported and reconciled. The master prompt refers to local migration utilities under `tg-helper-migration/`; use those existing utilities from the trusted local project folder and do not commit their exports or SQL snapshots. Those files are not part of the current GitHub `main` tree, so they cannot be executed through the repository connector alone.
 
-## Runtime variables and secrets
+Before production cutover:
 
-Configure these in the Cloudflare dashboard as Worker secrets/variables, not in source control:
+1. Take a separate Neon backup.
+2. Run the existing export and D1 conversion tools locally; keep snapshot and generated SQL files out of Git.
+3. Apply the D1 schema and import only into the intended empty target database.
+4. Compare row counts for all six tables, run `PRAGMA foreign_key_check`, and inspect representative records including voice file IDs and session drafts.
+5. Test authorization, notes, saved items, time zones, repeat reminders, shift cycles, retry handling, and scheduled dispatch with a non-production bot.
+6. Pause old writes/cron for the final snapshot, complete the import, and only then change Telegram's webhook to `/telegram`.
+7. Keep the previous Vercel/Neon deployment available for at least seven stable days after cutover.
 
-- `TELEGRAM_BOT_TOKEN` (secret)
-- `TELEGRAM_WEBHOOK_SECRET` (secret)
-- `ALLOWED_TELEGRAM_IDS` (variable; comma-separated Telegram numeric IDs)
-- `CRON_SECRET` (secret)
-
-The main Worker uses the D1 binding named `DB`. The cron Worker has its own config at `cloudflare/wrangler.cron.jsonc`, runs every five minutes (UTC), and calls `POST {TG_HELPER_URL}/api/cron/reminders`. Configure the cron Worker's `TG_HELPER_URL` and the same `CRON_SECRET` in both Workers.
-
-Do not deploy the scheduler until the app Worker is deployed, D1 data is imported and verified, and production cutover is approved: it can send real Telegram messages.
-
-## Data migration and cutover
-
-1. Take a normal Neon backup first.
-2. On a trusted local machine, set `SOURCE_DATABASE_URL` in the shell (never commit it) and run `npm run data:export-neon`. This creates a consistent, read-only JSON snapshot under `.migration/`.
-3. Run `npm run data:prepare-d1-import` to generate `.migration/d1-import.sql`; review the row counts before importing.
-4. Confirm the target D1 database is empty, then import with `npx wrangler d1 execute tg-helper-db --remote --file=.migration/d1-import.sql` only after the remote database has been created and its ID is configured.
-5. Import preserves primary keys, Telegram IDs, timestamps, reminder statuses, repeat metadata, shift metadata, session drafts, and Telegram file IDs. The export and generated SQL may contain private notes and must stay local.
-6. Compare row counts and validate foreign keys and representative records in D1.
-4. Run tests against a non-production bot/token and the local/preview Worker.
-5. Verify notes, voice notes, saved media, time zones, recurring reminders, shift reminders, retry logic, and authorization.
-6. Only after the above succeeds, plan webhook and scheduler cutover.
-7. Keep the old Vercel/Neon deployment available for at least seven stable days after cutover.
-
-No production resources, secrets, database data, or Telegram webhook have been changed by the branch edits so far.
+No D1 database has been created or migrated remotely, no production secrets have been set, and no Telegram webhook has been changed by the code edits in this branch.
