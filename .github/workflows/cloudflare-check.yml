@@ -25,6 +25,8 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Apply D1 migrations locally
+        run: npm run db:migrate:local
       - name: Type-check Worker
         run: npm run typecheck
       - name: Bundle Worker without deploying
