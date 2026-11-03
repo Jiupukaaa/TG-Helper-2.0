@@ -1,7 +1,6 @@
-import { randomUUID } from "node:crypto";
 import { Composer, InlineKeyboard } from "grammy";
-import { SessionStep } from "@prisma/client";
-import { getOrCreateUser, setSessionStep, clearSession, getSession } from "@/bot/session";
+import { SessionStep } from "@/db/types";
+import { getOrCreateUser, setSessionStep, clearSession, getSession, updateUserTimezone } from "@/bot/session";
 import { createReminder, listReminders, deleteReminder, deleteReminderGroup, getReminderGroup, updateReminderGroup, getOwnedReminder, ValidationError } from "@/services/remindersService";
 import { VOICE_NOTE_TEXT } from "@/services/notesService";
 import { parseLocalDateTime, formatLocalDateTime, DEFAULT_TIMEZONE, isValidTimezone } from "@/lib/time";
@@ -92,8 +91,7 @@ remindersComposer.command("settimezone", async (ctx) => {
   if (!tz) { await ctx.reply("Использование: /settimezone <IANA-название зоны>\nНапример: /settimezone Europe/Amsterdam"); return; }
   if (!isValidTimezone(tz)) { await ctx.reply("⚠️ Не удалось распознать часовой пояс. Проверьте название, например: Europe/Amsterdam, Asia/Yerevan."); return; }
   const user = await getOrCreateUser(BigInt(ctx.from!.id));
-  const { prisma } = await import("@/lib/prisma");
-  await prisma.user.update({ where: { id: user.id }, data: { timezone: tz } });
+  await updateUserTimezone(user.id, tz);
   await ctx.reply(`✅ Часовой пояс установлен: ${tz}`, { reply_markup: mainMenuKeyboard });
 });
 
@@ -387,7 +385,7 @@ export async function handleReminderTextInput(ctx: any, userId: number): Promise
         reminders.push(next.toJSDate());
       }
       try {
-        const repeatGroupId = randomUUID();
+        const repeatGroupId = crypto.randomUUID();
         for (const dueAt of reminders) await createReminder(userId, draft.text, dueAt, draft.voiceFileId, { repeatGroupId, repeatRule: rule });
         await clearSession(userId);
         await ctx.reply(`✅ Создано повторяющихся напоминаний: ${count}.\nПервое: ${formatLocalDateTime(reminders[0]!, user.timezone)}\nПоследнее: ${formatLocalDateTime(reminders[reminders.length - 1]!, user.timezone)}`, { reply_markup: remindersMenuKeyboard });
