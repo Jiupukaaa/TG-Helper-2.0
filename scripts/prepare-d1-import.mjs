@@ -39,7 +39,7 @@ for (const [table, columns] of schema) {
       if (!Object.hasOwn(row, column)) throw new Error("Missing " + table + "." + column + " in export.");
       return sqlValue(row[column]);
     });
-    const names = columns.map((column) => '"' + column + '"'').join(", ");
+    const names = columns.map((column) => '"' + column + '"').join(", ");
     statements.push('INSERT INTO "' + table + '" (' + names + ") VALUES (" + values.join(", ") + ");");
   }
 }
