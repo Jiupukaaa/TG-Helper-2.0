@@ -1,5 +1,5 @@
 import { Bot } from "grammy";
-import { SessionStep } from "@prisma/client";
+import { SessionStep } from "@/db/types";
 import { authMiddleware } from "@/bot/middleware/auth";
 import { getOrCreateUser, clearSession, getSession, setSessionStep } from "@/bot/session";
 import { mainMenuKeyboard, voiceNoteSavedKeyboard, notesMenuKeyboard, cancelKeyboard } from "@/bot/keyboards";
