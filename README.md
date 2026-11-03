@@ -1,5 +1,7 @@
 # TG Helper 2.0
 
+> **Cloudflare migration branch:** this branch is an in-progress migration to Cloudflare Workers + D1. See [`cloudflare/README.md`](cloudflare/README.md) for the active migration status, D1 setup, data export/import steps, and cutover safety gates. The legacy Vercel/Neon instructions below describe the original deployment and must not be used as deployment instructions for this branch until the migration is verified.
+
 Личный Telegram-ассистент без ИИ. Основной интерфейс — Telegram-бот; веб-приложение на Vercel используется как backend и имеет простую статус-страницу.
 
 TG Helper 2.0 предназначен для хранения личных заметок и создания напоминаний с учётом часового пояса пользователя.
