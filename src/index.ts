@@ -4,6 +4,7 @@ import { env as runtimeSecrets, setRuntimeEnv, type RuntimeEnv } from "@/lib/env
 import { setDB } from "@/db/client";
 import { claimDueReminders, markReminderFailed, markReminderSent } from "@/services/remindersService";
 import { cleanupPastShifts } from "@/services/shiftsService";
+import { claimWebhookUpdate } from "@/services/webhookDedupService";
 import { formatLocalDateTime } from "@/lib/time";
 
 type Env = RuntimeEnv;
@@ -100,6 +101,18 @@ export default {
       if (request.headers.get("x-telegram-bot-api-secret-token") !== runtimeSecrets.TELEGRAM_WEBHOOK_SECRET) {
         return new Response("Unauthorized", { status: 401 });
       }
+
+      const updatePayload = await request.clone().json().catch(() => null) as { update_id?: unknown } | null;
+      if (updatePayload && typeof updatePayload.update_id === "number" && Number.isSafeInteger(updatePayload.update_id)) {
+        try {
+          const claimed = await claimWebhookUpdate(updatePayload.update_id);
+          if (!claimed) return new Response("ok", { status: 200 });
+        } catch {
+          console.error("Telegram webhook deduplication failed.");
+          return new Response("ok", { status: 200 });
+        }
+      }
+
       const bot = getBot();
       await ensureBotCommands(bot);
       try {
