@@ -132,6 +132,14 @@ export async function createShifts(ownerId: number, startAts: Date[], timezone: 
   return createShiftsAtomic(ownerId, unique, timezone, name?.trim() || null, cycleGroupId ?? null);
 }
 
+export async function listShiftsInRange(ownerId: number, startAt: Date, endAt: Date): Promise<Shift[]> {
+  const rows = await all<ShiftRow>(
+    "SELECT * FROM shifts WHERE ownerId = ? AND startAt >= ? AND startAt < ? ORDER BY startAt ASC",
+    ownerId, startAt.toISOString(), endAt.toISOString(),
+  );
+  return rows.map(mapShift);
+}
+
 export async function listUpcomingShifts(ownerId: number): Promise<Shift[]> {
   const rows = await all<ShiftRow>(
     "SELECT * FROM shifts WHERE ownerId = ? AND startAt > ? ORDER BY startAt ASC LIMIT 100",
