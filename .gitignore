@@ -9,3 +9,5 @@ dev.db-journal
 .env.*
 !.env.example
 *.log
+
+.migration/
