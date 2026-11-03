@@ -1,5 +1,5 @@
-import { prisma } from "@/lib/prisma";
-import { ReminderStatus } from "@prisma/client";
+import { all, batch, first, run, statement } from "@/db/client";
+import { ReminderStatus, type Reminder, type User } from "@/db/types";
 import { isInPast } from "@/lib/time";
 import { ValidationError } from "./notesService";
 export { ValidationError };
@@ -8,6 +8,46 @@ const MAX_REMINDER_TEXT_LENGTH = 1000;
 const STUCK_PROCESSING_MINUTES = 5;
 const MAX_RETRIES = 3;
 const LEGACY_GROUP_WINDOW_MS = 10 * 60 * 1000;
+
+type ReminderRow = Omit<Reminder, "dueAt" | "processingStartedAt" | "sentAt" | "createdAt" | "updatedAt"> & {
+  dueAt: string;
+  processingStartedAt: string | null;
+  sentAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+type ReminderWithOwnerRow = ReminderRow & {
+  owner_id: number;
+  owner_telegramId: number;
+  owner_timezone: string;
+  owner_createdAt: string;
+  owner_updatedAt: string;
+};
+
+function mapReminder(row: ReminderRow): Reminder {
+  return {
+    ...row,
+    dueAt: new Date(row.dueAt),
+    processingStartedAt: row.processingStartedAt ? new Date(row.processingStartedAt) : null,
+    sentAt: row.sentAt ? new Date(row.sentAt) : null,
+    createdAt: new Date(row.createdAt),
+    updatedAt: new Date(row.updatedAt),
+  };
+}
+
+function mapReminderWithOwner(row: ReminderWithOwnerRow): Reminder & { owner: User } {
+  const { owner_id, owner_telegramId, owner_timezone, owner_createdAt, owner_updatedAt, ...reminderRow } = row;
+  return {
+    ...mapReminder(reminderRow),
+    owner: {
+      id: owner_id,
+      telegramId: owner_telegramId,
+      timezone: owner_timezone,
+      createdAt: new Date(owner_createdAt),
+      updatedAt: new Date(owner_updatedAt),
+    },
+  };
+}
 
 export function validateReminderText(text: string): string {
   const trimmed = text.trim();
@@ -25,19 +65,18 @@ type ReminderCreateOptions = {
   repeatRule?: "daily" | "weekly" | "monthly";
 };
 
-export async function createReminder(ownerId: number, text: string, dueAt: Date, voiceFileId?: string, options?: ReminderCreateOptions) {
+export async function createReminder(ownerId: number, text: string, dueAt: Date, voiceFileId?: string, options?: ReminderCreateOptions): Promise<Reminder> {
   const validatedText = validateReminderText(text);
   validateDueAt(dueAt);
-  return prisma.reminder.create({
-    data: {
-      ownerId,
-      text: validatedText,
-      dueAt,
-      voiceFileId,
-      repeatGroupId: options?.repeatGroupId,
-      repeatRule: options?.repeatRule,
-    },
-  });
+  const now = new Date().toISOString();
+  const rows = await all<ReminderRow>(
+    `INSERT INTO reminders (text, voiceFileId, dueAt, ownerId, repeatGroupId, repeatRule, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+    validatedText, voiceFileId ?? null, dueAt.toISOString(), ownerId,
+    options?.repeatGroupId ?? null, options?.repeatRule ?? null, now, now,
+  );
+  if (!rows[0]) throw new Error("Не удалось создать напоминание.");
+  return mapReminder(rows[0]);
 }
 
 function legacyRepeatRule(previous: Date, current: Date): "daily" | "weekly" | null {
@@ -63,7 +102,6 @@ function groupLegacyRecurringReminders<T extends {
 
   for (const seed of candidates) {
     if (processed.has(seed.id)) continue;
-
     const group = candidates.filter((item) =>
       !processed.has(item.id) &&
       item.ownerId === seed.ownerId &&
@@ -73,18 +111,14 @@ function groupLegacyRecurringReminders<T extends {
     ).sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
 
     if (group.length < 2) continue;
-
     let rule: "daily" | "weekly" | null = null;
     let valid = true;
     for (let i = 1; i < group.length; i += 1) {
       const detected = legacyRepeatRule(group[i - 1]!.dueAt, group[i]!.dueAt);
-      if (!detected) { valid = false; break; }
-      if (rule && rule !== detected) { valid = false; break; }
+      if (!detected || (rule && rule !== detected)) { valid = false; break; }
       rule = detected;
     }
-
     if (!valid || !rule) continue;
-
     const virtualGroupId = `legacy-${seed.id}`;
     for (const item of group) {
       const index = result.findIndex((reminder) => reminder.id === item.id);
@@ -94,142 +128,153 @@ function groupLegacyRecurringReminders<T extends {
       }
     }
   }
-
   return result;
 }
 
-export async function listReminders(ownerId: number) {
-  const reminders = await prisma.reminder.findMany({
-    where: { ownerId, shiftId: null, status: { in: [ReminderStatus.PENDING, ReminderStatus.PROCESSING] } },
-    orderBy: { dueAt: "asc" },
-  });
-  return groupLegacyRecurringReminders(reminders);
+export async function listReminders(ownerId: number): Promise<Reminder[]> {
+  const rows = await all<ReminderRow>(
+    "SELECT * FROM reminders WHERE ownerId = ? AND shiftId IS NULL AND status IN (?, ?) ORDER BY dueAt ASC",
+    ownerId, ReminderStatus.PENDING, ReminderStatus.PROCESSING,
+  );
+  return groupLegacyRecurringReminders(rows.map(mapReminder));
 }
 
-export async function getOwnedReminder(ownerId: number, reminderId: number) {
-  return prisma.reminder.findFirst({ where: { id: reminderId, ownerId, shiftId: null } });
+export async function getOwnedReminder(ownerId: number, reminderId: number): Promise<Reminder | null> {
+  const row = await first<ReminderRow>(
+    "SELECT * FROM reminders WHERE id = ? AND ownerId = ? AND shiftId IS NULL",
+    reminderId, ownerId,
+  );
+  return row ? mapReminder(row) : null;
 }
 
-export async function deleteReminder(ownerId: number, reminderId: number) {
-  const existing = await getOwnedReminder(ownerId, reminderId);
-  if (!existing) return null;
-  return prisma.reminder.delete({ where: { id: reminderId } });
+export async function deleteReminder(ownerId: number, reminderId: number): Promise<Reminder | null> {
+  const rows = await all<ReminderRow>(
+    "DELETE FROM reminders WHERE id = ? AND ownerId = ? AND shiftId IS NULL RETURNING *",
+    reminderId, ownerId,
+  );
+  return rows[0] ? mapReminder(rows[0]) : null;
 }
 
-async function getActiveReminders(ownerId: number) {
-  const reminders = await prisma.reminder.findMany({
-    where: { ownerId, shiftId: null, status: { in: [ReminderStatus.PENDING, ReminderStatus.PROCESSING] } },
-    orderBy: { dueAt: "asc" },
-  });
-  return groupLegacyRecurringReminders(reminders);
+async function getActiveReminders(ownerId: number): Promise<Reminder[]> {
+  const rows = await all<ReminderRow>(
+    "SELECT * FROM reminders WHERE ownerId = ? AND shiftId IS NULL AND status IN (?, ?) ORDER BY dueAt ASC",
+    ownerId, ReminderStatus.PENDING, ReminderStatus.PROCESSING,
+  );
+  return groupLegacyRecurringReminders(rows.map(mapReminder));
 }
 
-export async function getReminderGroup(ownerId: number, reminderId: number) {
+export async function getReminderGroup(ownerId: number, reminderId: number): Promise<Reminder[]> {
   const existing = await getOwnedReminder(ownerId, reminderId);
   if (!existing) return [];
   if (existing.repeatGroupId) {
-    return prisma.reminder.findMany({
-      where: {
-        ownerId,
-        repeatGroupId: existing.repeatGroupId,
-        shiftId: null,
-        status: { in: [ReminderStatus.PENDING, ReminderStatus.PROCESSING] },
-      },
-      orderBy: { dueAt: "asc" },
-    });
+    const rows = await all<ReminderRow>(
+      "SELECT * FROM reminders WHERE ownerId = ? AND repeatGroupId = ? AND shiftId IS NULL AND status IN (?, ?) ORDER BY dueAt ASC",
+      ownerId, existing.repeatGroupId, ReminderStatus.PENDING, ReminderStatus.PROCESSING,
+    );
+    return rows.map(mapReminder);
   }
-
   const active = await getActiveReminders(ownerId);
   const grouped = active.find((item) => item.id === reminderId);
   if (!grouped?.repeatGroupId) return [existing];
-
   return active.filter((item) => item.repeatGroupId === grouped.repeatGroupId);
 }
 
-export async function deleteReminderGroup(ownerId: number, reminderId: number) {
+export async function deleteReminderGroup(ownerId: number, reminderId: number): Promise<number> {
   const group = await getReminderGroup(ownerId, reminderId);
   if (!group.length) return 0;
-
-  const result = await prisma.reminder.deleteMany({
-    where: { ownerId, id: { in: group.map((item) => item.id) }, shiftId: null },
-  });
-  return result.count;
+  const placeholders = group.map(() => "?").join(", ");
+  const result = await run(
+    `DELETE FROM reminders WHERE ownerId = ? AND shiftId IS NULL AND id IN (${placeholders})`,
+    ownerId, ...group.map((item) => item.id),
+  );
+  return result.meta.changes;
 }
 
 export async function updateReminderGroup(
   ownerId: number,
   reminderId: number,
   changes: { text?: string; dueAt?: Date },
-) {
+): Promise<number> {
   const group = await getReminderGroup(ownerId, reminderId);
   if (!group.length) return 0;
+  const placeholders = group.map(() => "?").join(", ");
 
   if (changes.text !== undefined) {
     const text = validateReminderText(changes.text);
-    const result = await prisma.reminder.updateMany({
-      where: { ownerId, id: { in: group.map((item) => item.id) }, shiftId: null },
-      data: { text },
-    });
-    return result.count;
+    const result = await run(
+      `UPDATE reminders SET text = ?, updatedAt = ? WHERE ownerId = ? AND shiftId IS NULL AND id IN (${placeholders})`,
+      text, new Date().toISOString(), ownerId, ...group.map((item) => item.id),
+    );
+    return result.meta.changes;
   }
 
   if (changes.dueAt !== undefined) {
     validateDueAt(changes.dueAt);
-    const first = group[0]!;
-    const delta = changes.dueAt.getTime() - first.dueAt.getTime();
-    let count = 0;
-    for (const reminder of group) {
+    const firstReminder = group[0]!;
+    const delta = changes.dueAt.getTime() - firstReminder.dueAt.getTime();
+    const now = new Date().toISOString();
+    const statements = group.map((reminder) => {
       const dueAt = new Date(reminder.dueAt.getTime() + delta);
       validateDueAt(dueAt);
-      await prisma.reminder.update({ where: { id: reminder.id }, data: { dueAt } });
-      count += 1;
-    }
-    return count;
+      return statement(
+        "UPDATE reminders SET dueAt = ?, updatedAt = ? WHERE id = ? AND ownerId = ? AND shiftId IS NULL",
+        dueAt.toISOString(), now, reminder.id, ownerId,
+      );
+    });
+    const results = await batch(statements);
+    return results.reduce((count, result) => count + result.meta.changes, 0);
   }
-
   return 0;
 }
 
-export async function claimDueReminders(limit = 50) {
+export async function claimDueReminders(limit = 50): Promise<Array<Reminder & { owner: User }>> {
   const now = new Date();
-  const stuckThreshold = new Date(now.getTime() - STUCK_PROCESSING_MINUTES * 60 * 1000);
-  const candidates = await prisma.reminder.findMany({
-    where: {
-      OR: [
-        { status: ReminderStatus.PENDING, dueAt: { lte: now } },
-        { status: ReminderStatus.PROCESSING, processingStartedAt: { lt: stuckThreshold } },
-      ],
-    },
-    orderBy: { dueAt: "asc" },
-    take: limit,
-    select: { id: true, status: true },
-  });
-  const claimedIds: number[] = [];
-  for (const candidate of candidates) {
-    const result = await prisma.reminder.updateMany({
-      where: candidate.status === ReminderStatus.PENDING
-        ? { id: candidate.id, status: ReminderStatus.PENDING, dueAt: { lte: now } }
-        : { id: candidate.id, status: ReminderStatus.PROCESSING, processingStartedAt: { lt: stuckThreshold } },
-      data: { status: ReminderStatus.PROCESSING, processingStartedAt: now },
-    });
-    if (result.count === 1) claimedIds.push(candidate.id);
-  }
-  const claimed = claimedIds.map((id) => ({ id }));
-  if (claimed.length === 0) return [];
-  return prisma.reminder.findMany({ where: { id: { in: claimed.map((c) => c.id) } }, include: { owner: true } });
+  const nowIso = now.toISOString();
+  const stuckThreshold = new Date(now.getTime() - STUCK_PROCESSING_MINUTES * 60 * 1000).toISOString();
+  const claimedRows = await all<{ id: number }>(
+    `UPDATE reminders
+     SET status = ?, processingStartedAt = ?, updatedAt = ?
+     WHERE id IN (
+       SELECT id FROM reminders
+       WHERE (status = ? AND dueAt <= ?)
+          OR (status = ? AND processingStartedAt < ?)
+       ORDER BY dueAt ASC
+       LIMIT ?
+     )
+     RETURNING id`,
+    ReminderStatus.PROCESSING, nowIso, nowIso,
+    ReminderStatus.PENDING, nowIso,
+    ReminderStatus.PROCESSING, stuckThreshold,
+    limit,
+  );
+  if (!claimedRows.length) return [];
+  const placeholders = claimedRows.map(() => "?").join(", ");
+  const rows = await all<ReminderWithOwnerRow>(
+    `SELECT r.*, u.id AS owner_id, u.telegramId AS owner_telegramId, u.timezone AS owner_timezone,
+            u.createdAt AS owner_createdAt, u.updatedAt AS owner_updatedAt
+     FROM reminders r JOIN users u ON u.id = r.ownerId
+     WHERE r.id IN (${placeholders}) ORDER BY r.dueAt ASC`,
+    ...claimedRows.map((row) => row.id),
+  );
+  return rows.map(mapReminderWithOwner);
 }
 
-export async function markReminderSent(reminderId: number) {
-  await prisma.reminder.update({ where: { id: reminderId }, data: { status: ReminderStatus.SENT, sentAt: new Date(), lastError: null } });
+export async function markReminderSent(reminderId: number): Promise<void> {
+  const now = new Date().toISOString();
+  await run(
+    "UPDATE reminders SET status = ?, sentAt = ?, lastError = NULL, updatedAt = ? WHERE id = ?",
+    ReminderStatus.SENT, now, now, reminderId,
+  );
 }
 
-export async function markReminderFailed(reminderId: number, errorMessage: string, permanent: boolean) {
-  const reminder = await prisma.reminder.findUnique({ where: { id: reminderId } });
+export async function markReminderFailed(reminderId: number, errorMessage: string, permanent: boolean): Promise<void> {
+  const reminder = await first<{ retryCount: number }>("SELECT retryCount FROM reminders WHERE id = ?", reminderId);
   if (!reminder) return;
   const nextRetryCount = reminder.retryCount + 1;
   const exhausted = nextRetryCount >= MAX_RETRIES;
-  await prisma.reminder.update({
-    where: { id: reminderId },
-    data: { status: permanent || exhausted ? ReminderStatus.FAILED : ReminderStatus.PENDING, retryCount: nextRetryCount, lastError: errorMessage.slice(0, 500) },
-  });
+  const status = permanent || exhausted ? ReminderStatus.FAILED : ReminderStatus.PENDING;
+  await run(
+    "UPDATE reminders SET status = ?, retryCount = ?, lastError = ?, updatedAt = ? WHERE id = ?",
+    status, nextRetryCount, errorMessage.slice(0, 500), new Date().toISOString(), reminderId,
+  );
 }
