@@ -92,7 +92,7 @@ async function createShiftsAtomic(
   );
 
   // D1 limits SQL statement size; each chunk is kept well below the 100 KB limit.
-  for (const group of chunks(reminderRows, 50)) {
+  for (const group of chunks(reminderRows, 14)) {
     const values = group.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(", ");
     const params = group.flatMap((reminder) => [
       reminder.text, reminder.dueAt.toISOString(), reminder.ownerId, reminder.offsetMinutes,
