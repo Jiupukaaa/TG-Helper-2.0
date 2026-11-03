@@ -31,12 +31,3 @@ export async function run(query: string, ...values: SqlValue[]): Promise<D1Resul
 export async function batch(statements: D1PreparedStatement[]): Promise<D1Result[]> {
   return getDB().batch(statements);
 }
-
-export function iso(value: Date | string): string {
-  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
-}
-
-export function date(value: string | Date | null): Date | null {
-  if (value === null) return null;
-  return value instanceof Date ? value : new Date(value);
-}
