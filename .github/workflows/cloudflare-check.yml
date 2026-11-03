@@ -23,8 +23,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      - name: Install migration-tool dependencies
+        run: npm ci --prefix tg-helper-migration --no-audit --no-fund
+      - name: Test Neon export and D1 conversion (synthetic data)
+        run: npm run test:local --prefix tg-helper-migration
+      - name: Test PostgreSQL wire export and D1 conversion (synthetic data)
+        run: npm run test:export --prefix tg-helper-migration
+      - name: Install Worker dependencies
+        run: npm ci --no-audit --no-fund
       - name: Apply D1 migrations locally
         run: npm run db:migrate:local
       - name: Type-check Worker
