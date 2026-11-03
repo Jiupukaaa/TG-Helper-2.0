@@ -44,12 +44,17 @@ function futureShiftReminderData(ownerId: number, startAt: Date, timezone: strin
 export async function createShift(ownerId: number, startAt: Date, timezone: string, name?: string | null) {
   validateShiftStart(startAt);
   const normalizedName = name?.trim() || null;
-  return prisma.$transaction(async (tx) => {
-    const shift = await tx.shift.create({ data: { ownerId, startAt, name: normalizedName } });
+  const shift = await prisma.shift.create({ data: { ownerId, startAt, name: normalizedName } });
+  try {
     const reminders = futureShiftReminderData(ownerId, startAt, timezone, shift.id, normalizedName);
-    if (reminders.length) await tx.reminder.createMany({ data: reminders });
+    if (reminders.length) await prisma.reminder.createMany({ data: reminders });
     return shift;
-  });
+  } catch (error) {
+    // D1's Prisma adapter does not provide transactions; compensate if the
+    // reminder insert fails so a shift is not left partially configured.
+    await prisma.shift.delete({ where: { id: shift.id } }).catch(() => undefined);
+    throw error;
+  }
 }
 
 export async function createShifts(ownerId: number, startAts: Date[], timezone: string, name?: string | null, cycleGroupId?: string | null) {
@@ -59,17 +64,28 @@ export async function createShifts(ownerId: number, startAts: Date[], timezone: 
   if (unique.length === 0) throw new Error("Не выбрано ни одной смены.");
   unique.forEach(validateShiftStart);
   const normalizedName = name?.trim() || null;
+  const created: Array<{ id: number }> = [];
 
-  return prisma.$transaction(async (tx) => {
-    const created = [];
+  try {
     for (const startAt of unique) {
-      const shift = await tx.shift.create({ data: { ownerId, startAt, name: normalizedName, cycleGroupId: cycleGroupId ?? null } });
+      const shift = await prisma.shift.create({
+        data: { ownerId, startAt, name: normalizedName, cycleGroupId: cycleGroupId ?? null },
+      });
+      created.push({ id: shift.id });
       const reminders = futureShiftReminderData(ownerId, startAt, timezone, shift.id, normalizedName);
-      if (reminders.length) await tx.reminder.createMany({ data: reminders });
-      created.push(shift);
+      if (reminders.length) await prisma.reminder.createMany({ data: reminders });
     }
-    return created;
-  });
+    return await prisma.shift.findMany({
+      where: { id: { in: created.map((item) => item.id) } },
+      orderBy: { startAt: "asc" },
+    });
+  } catch (error) {
+    // Compensating rollback for the shifts created by this operation.
+    if (created.length) {
+      await prisma.shift.deleteMany({ where: { id: { in: created.map((item) => item.id) } } }).catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 export async function listUpcomingShifts(ownerId: number) {
@@ -117,30 +133,83 @@ export async function updateShift(ownerId: number, shiftId: number, startAt: Dat
   if (!shift || shift.startAt <= new Date()) return null;
   validateShiftStart(startAt);
   const normalizedName = name?.trim() || null;
-
-  return prisma.$transaction(async (tx) => {
-    await tx.reminder.deleteMany({
-      where: { shiftId, status: { in: [ReminderStatus.PENDING, ReminderStatus.PROCESSING] } },
-    });
-    const updated = await tx.shift.update({ where: { id: shiftId }, data: { startAt, name: normalizedName } });
-    const reminders = futureShiftReminderData(ownerId, startAt, timezone, shiftId, normalizedName);
-    if (reminders.length) await tx.reminder.createMany({ data: reminders });
-    return updated;
+  const activeStatuses = { in: [ReminderStatus.PENDING, ReminderStatus.PROCESSING] };
+  const previousReminders = await prisma.reminder.findMany({
+    where: { shiftId, status: activeStatuses },
   });
+
+  try {
+    await prisma.reminder.deleteMany({ where: { shiftId, status: activeStatuses } });
+    const updated = await prisma.shift.update({
+      where: { id: shiftId },
+      data: { startAt, name: normalizedName },
+    });
+    const reminders = futureShiftReminderData(ownerId, startAt, timezone, shiftId, normalizedName);
+    if (reminders.length) await prisma.reminder.createMany({ data: reminders });
+    return updated;
+  } catch (error) {
+    // D1 does not support interactive transactions. Restore the prior shift
+    // and its pending reminders if any part of the update fails.
+    await prisma.reminder.deleteMany({ where: { shiftId, status: activeStatuses } }).catch(() => undefined);
+    await prisma.shift.update({
+      where: { id: shiftId },
+      data: { startAt: shift.startAt, name: shift.name },
+    }).catch(() => undefined);
+    if (previousReminders.length) {
+      await prisma.reminder.createMany({
+        data: previousReminders.map((reminder) => ({
+          id: reminder.id,
+          text: reminder.text,
+          voiceFileId: reminder.voiceFileId,
+          dueAt: reminder.dueAt,
+          status: reminder.status,
+          processingStartedAt: reminder.processingStartedAt,
+          sentAt: reminder.sentAt,
+          retryCount: reminder.retryCount,
+          lastError: reminder.lastError,
+          ownerId: reminder.ownerId,
+          shiftId: reminder.shiftId,
+          offsetMinutes: reminder.offsetMinutes,
+          repeatGroupId: reminder.repeatGroupId,
+          repeatRule: reminder.repeatRule,
+          createdAt: reminder.createdAt,
+          updatedAt: reminder.updatedAt,
+        })),
+      }).catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 export async function updateShiftName(ownerId: number, shiftId: number, name?: string | null, timezone?: string) {
   const shift = await getOwnedShift(ownerId, shiftId);
   if (!shift || shift.startAt <= new Date()) return null;
   const normalizedName = name?.trim() || null;
-  return prisma.$transaction(async (tx) => {
-    const updated = await tx.shift.update({ where: { id: shiftId }, data: { name: normalizedName } });
+  const activeReminders = await prisma.reminder.findMany({
+    where: { shiftId, status: { in: [ReminderStatus.PENDING, ReminderStatus.PROCESSING] } },
+  });
+
+  try {
+    const updated = await prisma.shift.update({
+      where: { id: shiftId },
+      data: { name: normalizedName },
+    });
     if (timezone) {
-      const reminders = await tx.reminder.findMany({ where: { shiftId, status: { in: [ReminderStatus.PENDING, ReminderStatus.PROCESSING] } } });
-      for (const reminder of reminders) {
-        await tx.reminder.update({ where: { id: reminder.id }, data: { text: buildShiftReminderText(reminder.offsetMinutes ?? 0, shift.startAt, timezone, normalizedName) } });
+      for (const reminder of activeReminders) {
+        await prisma.reminder.update({
+          where: { id: reminder.id },
+          data: { text: buildShiftReminderText(reminder.offsetMinutes ?? 0, shift.startAt, timezone, normalizedName) },
+        });
       }
     }
     return updated;
-  });
+  } catch (error) {
+    // Best-effort compensation for D1, which has no Prisma transaction API.
+    await prisma.shift.update({ where: { id: shiftId }, data: { name: shift.name } }).catch(() => undefined);
+    for (const reminder of activeReminders) {
+      await prisma.reminder.update({ where: { id: reminder.id }, data: { text: reminder.text } }).catch(() => undefined);
+    }
+    throw error;
+  }
 }
+
