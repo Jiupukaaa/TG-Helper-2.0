@@ -1,4 +1,4 @@
-name: Cloudflare migration checks
+name: Cloudflare Worker checks
 
 on:
   push:
@@ -6,14 +6,14 @@ on:
       - feat/cloudflare
   pull_request:
     branches:
-      - feat/cloudflare
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  validate-and-build:
+  typecheck-and-build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -22,12 +22,10 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Validate Prisma schema
-        run: npx prisma validate
-      - name: Type-check
-        run: npx tsc --noEmit
-      - name: Build Cloudflare Worker
-        run: npm run cf:build
+      - name: Type-check Worker
+        run: npm run typecheck
+      - name: Bundle Worker without deploying
+        run: npx wrangler deploy --dry-run --outdir .worker-build
