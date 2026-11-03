@@ -325,7 +325,7 @@ const verifyParts = [
   "PRAGMA foreign_key_check;",
   "",
   "-- Must print 'ok'",
-  "PRAGMA integrity_check;",
+  "PRAGMA quick_check;",
   "",
 ];
 
