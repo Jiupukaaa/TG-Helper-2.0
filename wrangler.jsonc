@@ -1,13 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "tg-helper-2-0",
-  "main": ".open-next/worker.js",
-  "compatibility_date": "2026-11-01",
-  "compatibility_flags": ["nodejs_compat"],
-  "assets": {
-    "directory": ".open-next/assets",
-    "binding": "ASSETS"
-  },
+  "name": "tg-helper",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-03",
   "d1_databases": [
     {
       "binding": "DB",
@@ -16,6 +11,9 @@
       "migrations_dir": "cloudflare/migrations"
     }
   ],
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
   "observability": {
     "enabled": true
   }
