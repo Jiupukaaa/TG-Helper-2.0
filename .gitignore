@@ -1,6 +1,7 @@
 node_modules/
 .next/
 .open-next/
+.worker-build/
 .wrangler/
 dev.db
 dev.db-journal
