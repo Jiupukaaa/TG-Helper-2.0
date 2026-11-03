@@ -29,7 +29,6 @@ function sqlValue(value) {
 const statements = [
   "-- Generated from a local Neon export. Review row counts before applying.",
   "-- Target D1 must be empty; this script does not delete existing rows.",
-  "PRAGMA foreign_keys = ON;",
 ];
 for (const [table, columns] of schema) {
   const rows = exportData.tables[table];
