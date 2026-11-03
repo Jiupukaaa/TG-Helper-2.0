@@ -1,5 +1,5 @@
 import { Composer } from "grammy";
-import { SessionStep } from "@prisma/client";
+import { SessionStep } from "@/db/types";
 import { getOrCreateUser, setSessionStep, clearSession, getSession } from "@/bot/session";
 import {
   createNote,
