@@ -15,6 +15,9 @@ let commandSetupAttempted = false;
 function getBot(): Bot {
   if (botInstance) return botInstance;
   const bot = new Bot(runtimeSecrets.TELEGRAM_BOT_TOKEN);
+  bot.catch(() => {
+    console.error("Telegram update processing failed.");
+  });
   registerHandlers(bot);
   botInstance = bot;
   return bot;
@@ -116,7 +119,12 @@ export default {
       const bot = getBot();
       await ensureBotCommands(bot);
       try {
-        return await webhookCallback(bot, "cloudflare-mod")(request);
+        const response = await webhookCallback(bot, "cloudflare-mod")(request);
+        if (response.status >= 500) {
+          console.error("Telegram webhook returned an internal error.");
+          return new Response("ok", { status: 200 });
+        }
+        return response;
       } catch {
         // Avoid Telegram retry storms for application errors; details and message content are not logged.
         console.error("Telegram update processing failed.");
