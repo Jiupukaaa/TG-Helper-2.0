@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS reminders (
   shiftId INTEGER,
   offsetMinutes INTEGER,
   repeatGroupId TEXT,
-  repeatRule TEXT,
+  repeatRule TEXT CHECK (repeatRule IS NULL OR repeatRule IN ('daily', 'weekly', 'monthly')),
   createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updatedAt TEXT NOT NULL,
   FOREIGN KEY (ownerId) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS reminders (
 CREATE INDEX IF NOT EXISTS reminders_status_dueAt_idx ON reminders(status, dueAt);
 CREATE INDEX IF NOT EXISTS reminders_ownerId_idx ON reminders(ownerId);
 CREATE INDEX IF NOT EXISTS reminders_shiftId_idx ON reminders(shiftId);
+CREATE INDEX IF NOT EXISTS reminders_ownerId_repeatGroupId_idx ON reminders(ownerId, repeatGroupId);
 
 CREATE TABLE IF NOT EXISTS sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,7 +93,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     'SHIFT_CYCLE_AWAITING_NAME',
     'SHIFT_EDIT_AWAITING_NAME'
   )),
-  draft TEXT,
+  draft TEXT CHECK (draft IS NULL OR json_valid(draft)),
   updatedAt TEXT NOT NULL,
   FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE
 );
