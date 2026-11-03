@@ -1,4 +1,4 @@
-import { all, first, run } from "@/db/client";
+import { all, first } from "@/db/client";
 import type { SavedItem } from "@/db/types";
 
 export type SavedItemType = "LINK" | "PHOTO" | "GIF";
