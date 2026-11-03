@@ -1,0 +1,18 @@
+{
+  "name": "tg-helper-migration",
+  "version": "1.0.0",
+  "private": true,
+  "description": "One-off Neon PostgreSQL to Cloudflare D1 migration tools for TG-Helper 2.0",
+  "type": "module",
+  "scripts": {
+    "export": "node export-neon.mjs",
+    "to-d1": "node to-d1.mjs",
+    "test:local": "node test-local.mjs",
+    "test:export": "node test-export.mjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.11",
+    "@electric-sql/pglite-socket": "^0.2.14",
+    "pg": "^8.23.1"
+  }
+}
