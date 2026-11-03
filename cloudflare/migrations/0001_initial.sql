@@ -2,8 +2,6 @@
 -- SQLite/D1 equivalent of the current Prisma models on main.
 -- This creates an empty schema only; it does not import or alter Neon data.
 
-PRAGMA foreign_keys = ON;
-
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   telegramId INTEGER NOT NULL UNIQUE,
