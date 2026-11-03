@@ -75,7 +75,7 @@ async function createShiftsAtomic(
 ): Promise<Shift[]> {
   const now = new Date().toISOString();
 
-  // Use CTEs so a long cycle stays under D1's 100-bound-parameter limit per statement.
+  // CTE chunks keep each statement under 100 bound parameters and a 366-day cycle under D1's ~5,000 total bindings per Worker invocation.
   const shiftStatements = chunks(startAts, 90).map((group) => {
     const values = group.map(() => "(?)").join(", ");
     return statement(
