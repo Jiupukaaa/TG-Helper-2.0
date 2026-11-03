@@ -1,4 +1,5 @@
 import { Composer, InlineKeyboard } from "grammy";
+import { SessionStep } from "@/db/types";
 import { getOrCreateUser } from "@/bot/session";
 import { listNotes, deleteNote } from "@/services/notesService";
 
@@ -25,7 +26,7 @@ notesBulkComposer.callbackQuery(/^notes:bulk_toggle:(\d+)$/, async (ctx) => {
   const draft = (session?.draft as { ids?: number[] } | null) ?? {};
   const ids = new Set(draft.ids ?? []);
   ids.has(id) ? ids.delete(id) : ids.add(id);
-  await setSessionStep(user.id, "IDLE" as any, { ids: [...ids] });
+  await setSessionStep(user.id, SessionStep.IDLE, { ids: [...ids] });
   const notes = await listNotes(user.id);
   const k = new InlineKeyboard();
   notes.forEach((note, index) => { k.text(`${ids.has(note.id) ? "☑" : "☐"} #${index + 1}`, `notes:bulk_toggle:${note.id}`); if (index % 2 === 1) k.row(); });
