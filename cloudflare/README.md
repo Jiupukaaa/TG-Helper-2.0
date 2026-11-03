@@ -49,7 +49,20 @@ After taking a Neon backup, create the empty D1 schema before importing data:
 npm run db:migrate:remote
 ```
 
-Then use the existing local export/conversion utilities to import the six Neon tables. Reconcile row counts, run `PRAGMA foreign_key_check`, and smoke-test the imported records. **Do not deploy or switch the production webhook yet.**
+Then run the migration tools from `tg-helper-migration/` (see its README): export Neon to a local snapshot, convert it to D1 SQL, and import **only** `tg-helper-migration/d1-export/data.sql` from the repository root:
+
+```powershell
+cd tg-helper-migration
+npm ci
+$env:DATABASE_URL = "<Neon connection string; keep local and never commit>"
+npm run export -- .\\neon-export
+npm run to-d1 -- .\\neon-export\\snapshot.json .\\d1-export
+cd ..
+npx wrangler d1 execute tg-helper --remote --file=./tg-helper-migration/d1-export/data.sql
+npx wrangler d1 execute tg-helper --remote --file=./tg-helper-migration/d1-export/verify.sql
+```
+
+The schema must already have been applied with Wrangler migrations. Do not execute `d1.sql` against this migration-managed database; it is intended for standalone SQLite tests. Reconcile all six row counts against `manifest.json`, run `PRAGMA foreign_key_check`, and smoke-test imported records. **Do not deploy or switch the production webhook yet.**
 
 Only after import verification and non-production smoke tests, deploy the Worker:
 
@@ -61,7 +74,7 @@ The scheduled trigger is in the same Worker configuration. There is no separate 
 
 ## Data migration and cutover safety
 
-The migration branch must not be pointed at production traffic until the existing Neon data is imported and reconciled. The master prompt refers to local migration utilities under `tg-helper-migration/`; use those existing utilities from the trusted local project folder and do not commit their exports or SQL snapshots. Those files are not part of the current GitHub `main` tree, so they cannot be executed through the repository connector alone.
+The migration branch must not be pointed at production traffic until the existing Neon data is imported and reconciled. The migration utilities are now versioned under `tg-helper-migration/`. Their tests use synthetic fixtures only; they do not connect to the production Neon database. Keep actual `neon-export/` and `d1-export/` outputs local and out of Git.
 
 Before production cutover:
 
