@@ -1,0 +1,11 @@
+node_modules/
+.next/
+.open-next/
+.wrangler/
+dev.db
+dev.db-journal
+.dev.vars
+.env
+.env.*
+!.env.example
+*.log
