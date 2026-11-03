@@ -74,38 +74,74 @@ async function createShiftsAtomic(
   cycleGroupId: string | null,
 ): Promise<Shift[]> {
   const now = new Date().toISOString();
-  const statements = startAts.map((startAt) => statement(
-    "INSERT INTO shifts (name, startAt, ownerId, cycleGroupId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)",
-    name, startAt.toISOString(), ownerId, cycleGroupId, now, now,
-  ));
 
-  const reminderRows = startAts.flatMap((startAt) =>
-    futureShiftReminderData(ownerId, startAt, timezone, name).map((reminder) => ({
-      ...reminder,
-      createdAt: now,
-      updatedAt: now,
-    })),
-  );
+  // Use CTEs so a long cycle stays under D1's 100-bound-parameter limit per statement.
+  const shiftStatements = chunks(startAts, 90).map((group) => {
+    const values = group.map(() => "(?)").join(", ");
+    return statement(
+      `WITH params(name, ownerId, cycleGroupId, createdAt, updatedAt) AS (VALUES (?, ?, ?, ?, ?)),
+       shift_dates(startAt) AS (VALUES ${values})
+       INSERT INTO shifts (name, startAt, ownerId, cycleGroupId, createdAt, updatedAt)
+       SELECT p.name, d.startAt, p.ownerId, p.cycleGroupId, p.createdAt, p.updatedAt
+       FROM shift_dates d CROSS JOIN params p`,
+      name, ownerId, cycleGroupId, now, now, ...group.map((startAt) => startAt.toISOString()),
+    );
+  });
 
-  // D1 limits SQL statement size; each chunk is kept well below the 100 KB limit.
-  for (const group of chunks(reminderRows, 14)) {
-    const values = group.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(", ");
-    const params = group.flatMap((reminder) => [
-      reminder.text, reminder.dueAt.toISOString(), reminder.ownerId, reminder.offsetMinutes,
-      reminder.createdAt, reminder.updatedAt, reminder.startAt,
-    ]);
-    statements.push(statement(
-      `WITH reminder_data(text, dueAt, ownerId, offsetMinutes, createdAt, updatedAt, startAt)
-       AS (VALUES ${values})
+  const reminderPlans = startAts.map((startAt) => {
+    const reminders = new Map(
+      futureShiftReminderData(ownerId, startAt, timezone, name)
+        .map((reminder) => [reminder.offsetMinutes, reminder] as const),
+    );
+    const get = (offset: number) => {
+      const reminder = reminders.get(offset);
+      return reminder ? { text: reminder.text, dueAt: reminder.dueAt.toISOString() } : { text: null, dueAt: null };
+    };
+    const minusSix = get(-360);
+    const minusFour = get(-240);
+    const minusTwo = get(-120);
+    const atStart = get(0);
+    return [
+      startAt.toISOString(),
+      minusSix.text, minusSix.dueAt,
+      minusFour.text, minusFour.dueAt,
+      minusTwo.text, minusTwo.dueAt,
+      atStart.text, atStart.dueAt,
+    ];
+  });
+
+  const reminderStatements = chunks(reminderPlans, 10).map((group) => {
+    const values = group.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+    const params = group.flatMap((row) => row);
+    return statement(
+      `WITH params(ownerId, createdAt, updatedAt) AS (VALUES (?, ?, ?)),
+       reminder_data(startAt, text6, due6, text4, due4, text2, due2, text0, due0) AS (VALUES ${values})
        INSERT INTO reminders (text, dueAt, status, ownerId, shiftId, offsetMinutes, createdAt, updatedAt)
-       SELECT d.text, d.dueAt, 'PENDING', d.ownerId, s.id, d.offsetMinutes, d.createdAt, d.updatedAt
-       FROM reminder_data d
-       JOIN shifts s ON s.ownerId = d.ownerId AND s.startAt = d.startAt`,
-      ...params,
-    ));
-  }
+       SELECT d.text6, d.due6, 'PENDING', p.ownerId, s.id, -360, p.createdAt, p.updatedAt
+       FROM reminder_data d JOIN params p ON 1 = 1
+       JOIN shifts s ON s.ownerId = p.ownerId AND s.startAt = d.startAt
+       WHERE d.due6 IS NOT NULL
+       UNION ALL
+       SELECT d.text4, d.due4, 'PENDING', p.ownerId, s.id, -240, p.createdAt, p.updatedAt
+       FROM reminder_data d JOIN params p ON 1 = 1
+       JOIN shifts s ON s.ownerId = p.ownerId AND s.startAt = d.startAt
+       WHERE d.due4 IS NOT NULL
+       UNION ALL
+       SELECT d.text2, d.due2, 'PENDING', p.ownerId, s.id, -120, p.createdAt, p.updatedAt
+       FROM reminder_data d JOIN params p ON 1 = 1
+       JOIN shifts s ON s.ownerId = p.ownerId AND s.startAt = d.startAt
+       WHERE d.due2 IS NOT NULL
+       UNION ALL
+       SELECT d.text0, d.due0, 'PENDING', p.ownerId, s.id, 0, p.createdAt, p.updatedAt
+       FROM reminder_data d JOIN params p ON 1 = 1
+       JOIN shifts s ON s.ownerId = p.ownerId AND s.startAt = d.startAt
+       WHERE d.due0 IS NOT NULL`,
+      ownerId, now, now, ...params,
+    );
+  });
 
-  await batch(statements);
+  await batch([...shiftStatements, ...reminderStatements]);
+
   const rows: ShiftRow[] = [];
   for (const group of chunks(startAts, 99)) {
     const placeholders = group.map(() => "?").join(", ");
