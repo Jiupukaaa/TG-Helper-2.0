@@ -56,9 +56,12 @@ Do not deploy the scheduler until the app Worker is deployed, D1 data is importe
 
 ## Data migration and cutover
 
-1. Take a consistent Neon backup/export.
-2. Import all tables preserving primary keys, Telegram IDs, UTC datetimes, reminder statuses, repeat metadata, shift metadata, session drafts, and Telegram file IDs.
-3. Compare row counts and validate foreign keys and representative records in D1.
+1. Take a normal Neon backup first.
+2. On a trusted local machine, set `SOURCE_DATABASE_URL` in the shell (never commit it) and run `npm run data:export-neon`. This creates a consistent, read-only JSON snapshot under `.migration/`.
+3. Run `npm run data:prepare-d1-import` to generate `.migration/d1-import.sql`; review the row counts before importing.
+4. Confirm the target D1 database is empty, then import with `npx wrangler d1 execute tg-helper-db --remote --file=.migration/d1-import.sql` only after the remote database has been created and its ID is configured.
+5. Import preserves primary keys, Telegram IDs, timestamps, reminder statuses, repeat metadata, shift metadata, session drafts, and Telegram file IDs. The export and generated SQL may contain private notes and must stay local.
+6. Compare row counts and validate foreign keys and representative records in D1.
 4. Run tests against a non-production bot/token and the local/preview Worker.
 5. Verify notes, voice notes, saved media, time zones, recurring reminders, shift reminders, retry logic, and authorization.
 6. Only after the above succeeds, plan webhook and scheduler cutover.
