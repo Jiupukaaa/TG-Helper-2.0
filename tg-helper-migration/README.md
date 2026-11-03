@@ -56,7 +56,7 @@ npx wrangler d1 execute tg-helper --remote --file=.\d1-export\verify.sql
 ```
 
 Сверьте все шесть row counts с manifest.json. Убедитесь, что
-PRAGMA foreign_key_check возвращает пустой результат, а integrity_check — ok.
+PRAGMA foreign_key_check возвращает пустой результат, а quick_check — ok.
 Не импортируйте повторно поверх заполненной базы: INSERT'ы не идемпотентны.
 Перед повторным импортом используйте новую/очищенную целевую БД.
 
