@@ -74,7 +74,8 @@ export const prisma = new Proxy({} as PrismaClient, {
         if (typeof method !== "string") return undefined;
         return (...args: unknown[]) =>
           resolvePrismaClient().then((client) => {
-            const delegate = (client as unknown as Record<string, Record<string, (...args: unknown[]) => unknown>>)[property];
+            const delegate = (client as unknown as Record<string, Record<string, (...args: unknown[]) => unknown> | undefined>)[property];
+            if (!delegate) throw new Error("Unknown Prisma delegate: " + property);
             return Reflect.apply(delegate[method]!, delegate, args);
           });
       },
