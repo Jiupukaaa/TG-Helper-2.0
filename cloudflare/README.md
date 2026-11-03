@@ -41,10 +41,19 @@ Create the intended D1 database with `npx wrangler d1 create tg-helper` (or sele
 
 Configure `ALLOWED_TELEGRAM_IDS` as a Worker variable containing comma-separated numeric Telegram user IDs. An empty allowlist denies all users.
 
-Set the secrets using the Cloudflare dashboard or `npx wrangler secret put <SECRET_NAME>`. Set `ALLOWED_TELEGRAM_IDS` as a non-secret Worker variable. Only after a backup and verified data import, apply the D1 migration remotely and deploy:
+Set the secrets using the Cloudflare dashboard or `npx wrangler secret put <SECRET_NAME>`. Set `ALLOWED_TELEGRAM_IDS` as a non-secret Worker variable.
+
+After taking a Neon backup, create the empty D1 schema before importing data:
 
 ```powershell
 npm run db:migrate:remote
+```
+
+Then use the existing local export/conversion utilities to import the six Neon tables. Reconcile row counts, run `PRAGMA foreign_key_check`, and smoke-test the imported records. **Do not deploy or switch the production webhook yet.**
+
+Only after import verification and non-production smoke tests, deploy the Worker:
+
+```powershell
 npm run deploy
 ```
 
