@@ -29,6 +29,8 @@
     "src/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "src/app/**",
+    "src/lib/prisma.ts"
   ]
 }
