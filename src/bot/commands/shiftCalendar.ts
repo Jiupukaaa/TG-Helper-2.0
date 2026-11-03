@@ -1,7 +1,7 @@
 import { Composer, InlineKeyboard } from "grammy";
 import { DateTime } from "luxon";
 import { getOrCreateUser } from "@/bot/session";
-import { prisma } from "@/lib/prisma";
+import { listShiftsInRange } from "@/services/shiftsService";
 
 export const shiftCalendarComposer = new Composer();
 const DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
@@ -12,16 +12,11 @@ async function renderCalendar(ctx: any, userId: number, monthIso?: string) {
     monthIso ?? DateTime.now().setZone(user.timezone).toFormat("yyyy-MM-01"),
     { zone: user.timezone },
   ).startOf("month");
-  const shifts = await prisma.shift.findMany({
-    where: {
-      ownerId: userId,
-      startAt: {
-        gte: month.toUTC().toJSDate(),
-        lt: month.plus({ months: 1 }).toUTC().toJSDate(),
-      },
-    },
-    orderBy: { startAt: "asc" },
-  });
+  const shifts = await listShiftsInRange(
+    userId,
+    month.toUTC().toJSDate(),
+    month.plus({ months: 1 }).toUTC().toJSDate(),
+  );
   const byDay = new Map<number, number>();
   for (const shift of shifts) {
     const d = DateTime.fromJSDate(shift.startAt, { zone: "utc" }).setZone(user.timezone).day;
