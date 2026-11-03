@@ -12,3 +12,10 @@ dev.db-journal
 *.log
 
 .migration/
+
+# One-off Neon -> D1 migration outputs (never commit real user data)
+tg-helper-migration/node_modules/
+tg-helper-migration/neon-export/
+tg-helper-migration/d1-export/
+tg-helper-migration/test/out/
+tg-helper-migration/test/out-export/
