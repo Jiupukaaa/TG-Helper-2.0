@@ -1,6 +1,6 @@
-// Central place to read & validate environment variables.
-// Fails fast (at first use) with a clear error instead of a confusing
-// downstream crash, and never logs the actual secret values.
+// Central place to read and validate environment variables.
+// Never log secret values. On Cloudflare, configure these values as Worker
+// variables/secrets; the D1 database is provided separately through binding DB.
 
 function required(name: string): string {
   const value = process.env[name];
@@ -24,9 +24,6 @@ export const env = {
   },
   get CRON_SECRET(): string {
     return required("CRON_SECRET");
-  },
-  get DATABASE_URL(): string {
-    return required("DATABASE_URL");
   },
   get ALLOWED_TELEGRAM_IDS(): bigint[] {
     const raw = optional("ALLOWED_TELEGRAM_IDS", "");
