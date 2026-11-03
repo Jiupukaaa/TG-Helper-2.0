@@ -9,20 +9,14 @@ import { formatLocalDateTime } from "@/lib/time";
 type Env = RuntimeEnv;
 
 let botInstance: Bot | undefined;
-let handlersRegistered = false;
 let commandSetupAttempted = false;
 
 function getBot(): Bot {
-  if (!botInstance) {
-    botInstance = new Bot(runtimeSecrets.TELEGRAM_BOT_TOKEN);
-    registerHandlers(botInstance);
-    handlersRegistered = true;
-  }
-  if (!handlersRegistered) {
-    registerHandlers(botInstance);
-    handlersRegistered = true;
-  }
-  return botInstance;
+  if (botInstance) return botInstance;
+  const bot = new Bot(runtimeSecrets.TELEGRAM_BOT_TOKEN);
+  registerHandlers(bot);
+  botInstance = bot;
+  return bot;
 }
 
 async function ensureBotCommands(bot: Bot): Promise<void> {
