@@ -1,14 +1,17 @@
+// LEGACY REFERENCE ONLY: schema for the original Neon/PostgreSQL deployment.
+// The native Cloudflare Worker does not use Prisma. The D1 schema is maintained
+// in cloudflare/migrations/*.sql and runtime queries live in src/db and src/services.
+
 // TG Helper — Prisma schema
-// Cloudflare D1 uses SQLite. The runtime connects through @prisma/adapter-d1;
-// this local file URL is used by Prisma tooling and local non-Workers development.
+// Postgres (Neon) is the target database. Do not use SQLite in production.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -18,11 +21,11 @@ model User {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  notes      Note[]
-  reminders  Reminder[]
-  shifts     Shift[]
+  notes     Note[]
+  reminders Reminder[]
+  shifts    Shift[]
   savedItems SavedItem[]
-  session    Session?
+  session   Session?
 
   @@map("users")
 }
@@ -68,24 +71,26 @@ enum ReminderStatus {
 }
 
 model Reminder {
-  id                  Int            @id @default(autoincrement())
-  text                String
-  voiceFileId         String?
-  dueAt               DateTime
-  status              ReminderStatus @default(PENDING)
+  id      Int    @id @default(autoincrement())
+  text    String
+  voiceFileId String?
+  dueAt   DateTime
+  status  ReminderStatus @default(PENDING)
+
   processingStartedAt DateTime?
   sentAt              DateTime?
-  retryCount          Int            @default(0)
+  retryCount          Int       @default(0)
   lastError           String?
-  ownerId             Int
-  owner               User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  shiftId             Int?
-  shift               Shift?         @relation(fields: [shiftId], references: [id], onDelete: Cascade)
-  offsetMinutes       Int?
-  repeatGroupId       String?
-  repeatRule          String?
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+
+  ownerId   Int
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  shiftId   Int?
+  shift     Shift?   @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  offsetMinutes Int?
+  repeatGroupId String?
+  repeatRule    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([shiftId, offsetMinutes])
   @@index([status, dueAt])
@@ -96,15 +101,15 @@ model Reminder {
 }
 
 model Shift {
-  id           Int        @id @default(autoincrement())
-  name         String?
-  startAt      DateTime
-  ownerId      Int
-  owner        User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  cycleGroupId String?
-  reminders    Reminder[]
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id              Int        @id @default(autoincrement())
+  name            String?
+  startAt         DateTime
+  ownerId         Int
+  owner           User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  cycleGroupId    String?
+  reminders       Reminder[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   @@unique([ownerId, startAt])
   @@index([ownerId, startAt])
@@ -131,12 +136,13 @@ enum SessionStep {
 }
 
 model Session {
-  id        Int        @id @default(autoincrement())
-  userId    Int        @unique
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  step      SessionStep @default(IDLE)
-  draft     Json?
-  updatedAt DateTime   @updatedAt
+  id     Int    @id @default(autoincrement())
+  userId Int    @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  step SessionStep @default(IDLE)
+  draft Json?
+  updatedAt DateTime @updatedAt
 
   @@map("sessions")
 }
