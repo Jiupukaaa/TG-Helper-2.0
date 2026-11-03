@@ -73,7 +73,6 @@ CREATE TABLE IF NOT EXISTS reminders (
 CREATE INDEX IF NOT EXISTS reminders_status_dueAt_idx ON reminders(status, dueAt);
 CREATE INDEX IF NOT EXISTS reminders_ownerId_idx ON reminders(ownerId);
 CREATE INDEX IF NOT EXISTS reminders_shiftId_idx ON reminders(shiftId);
-CREATE INDEX IF NOT EXISTS reminders_ownerId_repeatGroupId_idx ON reminders(ownerId, repeatGroupId);
 
 CREATE TABLE IF NOT EXISTS sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -100,4 +99,3 @@ CREATE TABLE IF NOT EXISTS sessions (
   FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS reminders_ownerId_repeatGroupId_idx ON reminders(ownerId, repeatGroupId);
