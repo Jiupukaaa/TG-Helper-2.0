@@ -170,19 +170,6 @@ export default {
       }
     }
 
-    if (request.method === "POST" && url.pathname === "/internal/run-reminders") {
-      if (request.headers.get("authorization") !== `Bearer ${runtimeSecrets.CRON_SECRET}`) {
-        return new Response("Unauthorized", { status: 401 });
-      }
-      try {
-        const result = await dispatchReminders();
-        return Response.json({ ok: true, ...result });
-      } catch {
-        console.error("Manual reminder dispatch failed.");
-        return Response.json({ ok: false }, { status: 500 });
-      }
-    }
-
     if (request.method === "GET" && url.pathname === "/health") {
       return Response.json({ ok: true });
     }
