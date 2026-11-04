@@ -113,7 +113,7 @@ shiftsComposer.callbackQuery(/^shift:free:mode:(single|range)$/, async (ctx) => 
   await showFreeTimeCalendar(ctx, user.id, month);
 });
 shiftsComposer.callbackQuery("shift:free:noop", async (ctx) => { await ctx.answerCallbackQuery(); });
-shiftsComposer.callbackQuery(/^shift:free:month:(\\d{4}-\\d{2}-\\d{2})$/, async (ctx) => {
+shiftsComposer.callbackQuery(/^shift:free:month:(\d{4}-\d{2}-\d{2})$/, async (ctx) => {
   await ctx.answerCallbackQuery();
   const user = await getOrCreateUser(BigInt(ctx.from.id));
   const draft = draftOf(await getSession(user.id));
@@ -121,7 +121,7 @@ shiftsComposer.callbackQuery(/^shift:free:month:(\\d{4}-\\d{2}-\\d{2})$/, async 
   await setSessionStep(user.id, SessionStep.SHIFT_CYCLE_AWAITING_START_DATE, { ...draft, calendarMonth: monthValue });
   await showFreeTimeCalendar(ctx, user.id, monthValue);
 });
-shiftsComposer.callbackQuery(/^shift:free:date:(\\d{4}-\\d{2}-\\d{2})$/, async (ctx) => {
+shiftsComposer.callbackQuery(/^shift:free:date:(\d{4}-\d{2}-\d{2})$/, async (ctx) => {
   const user = await getOrCreateUser(BigInt(ctx.from.id));
   const draft = draftOf(await getSession(user.id));
   const selected = DateTime.fromISO(ctx.match[1]!, { zone: user.timezone }).startOf("day");
