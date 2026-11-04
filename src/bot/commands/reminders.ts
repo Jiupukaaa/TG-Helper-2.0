@@ -410,3 +410,6 @@ export async function handleReminderVoiceInput(ctx: any, userId: number): Promis
   await ctx.reply("🎙️ Голосовое сохранено. Теперь введите дату и время в формате DD.MM.YYYY HH:mm:", { reply_markup: cancelKeyboard });
   return true;
 }
+
+
+remindersComposer.hears("🔔 Напоминания", async (ctx) => { const user = await getOrCreateUser(BigInt(ctx.from!.id)); await showRemindersList(ctx, user.id, user.timezone, "reply"); });
