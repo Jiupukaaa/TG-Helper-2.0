@@ -54,7 +54,10 @@ async function renderCalendar(ctx: any, userId: number, monthIso?: string, edit 
 }
 
 shiftCalendarComposer.command("calendar", async (ctx) => {
-  const user = await getOrCreateUser(BigInt(ctx.from!.id));\n  await renderCalendar(ctx, user.id, undefined, false);\n});\n\nshiftCalendarComposer.callbackQuery("shift:calendar", async (ctx) => {
+  const user = await getOrCreateUser(BigInt(ctx.from!.id));
+  await renderCalendar(ctx, user.id, undefined, false);\n});
+
+shiftCalendarComposer.callbackQuery("shift:calendar", async (ctx) => {
   await ctx.answerCallbackQuery();
   const user = await getOrCreateUser(BigInt(ctx.from.id));
   await renderCalendar(ctx, user.id);
