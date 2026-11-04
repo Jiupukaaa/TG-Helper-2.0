@@ -8,7 +8,7 @@ import { mainMenuKeyboard } from "@/bot/keyboards";
 
 export const shiftsComposer = new Composer();
 const DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
-type Draft = { dates?: string[]; calendarMonth?: string; time?: string; workDays?: number; offDays?: number; firstDate?: string; editShiftId?: number; pendingStarts?: string[] };
+type Draft = { dates?: string[]; calendarMonth?: string; time?: string; endTime?: string; workDays?: number; offDays?: number; firstDate?: string; editShiftId?: number; pendingStarts?: string[]; pendingEnds?: string[]; freeTime?: boolean; freeStartDate?: string };
 const draftOf = (session: any): Draft => (session?.draft as Draft | null) ?? {};
 function parseTime(input: string) { const m = /^(\d{2}):(\d{2})$/.exec(input.trim()); if (!m) return null; const hour = Number(m[1]), minute = Number(m[2]); return hour <= 23 && minute <= 59 ? { hour, minute } : null; }
 function parseDate(input: string, timezone: string) { const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(input.trim()); if (!m) return null; const dt = DateTime.fromObject({ day: Number(m[1]), month: Number(m[2]), year: Number(m[3]) }, { zone: timezone }); return dt.isValid ? dt.startOf("day") : null; }
