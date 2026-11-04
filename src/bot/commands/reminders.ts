@@ -4,7 +4,7 @@ import { getOrCreateUser, setSessionStep, clearSession, getSession, updateUserTi
 import { createReminder, listReminders, deleteReminder, deleteReminderGroup, getReminderGroup, updateReminderGroup, getOwnedReminder, ValidationError } from "@/services/remindersService";
 import { VOICE_NOTE_TEXT } from "@/services/notesService";
 import { parseLocalDateTime, formatLocalDateTime, DEFAULT_TIMEZONE, isValidTimezone } from "@/lib/time";
-import { remindersMenuKeyboard, remindersListKeyboard, remindersDeleteSelectionKeyboard, reminderManageKeyboard, reminderInstanceSelectionKeyboard, reminderEditFieldKeyboard, cancelKeyboard, confirmDeleteKeyboard, mainMenuKeyboard } from "@/bot/keyboards";
+import { remindersMenuKeyboard, remindersListKeyboard, remindersDeleteSelectionKeyboard, reminderManageKeyboard, reminderInstanceSelectionKeyboard, reminderEditFieldKeyboard, cancelKeyboard, confirmDeleteKeyboard } from "@/bot/keyboards";
 
 export const remindersComposer = new Composer();
 
@@ -92,7 +92,7 @@ remindersComposer.command("settimezone", async (ctx) => {
   if (!isValidTimezone(tz)) { await ctx.reply("⚠️ Не удалось распознать часовой пояс. Проверьте название, например: Europe/Amsterdam, Asia/Yerevan."); return; }
   const user = await getOrCreateUser(BigInt(ctx.from!.id));
   await updateUserTimezone(user.id, tz);
-  await ctx.reply(`✅ Часовой пояс установлен: ${tz}`, { reply_markup: mainMenuKeyboard });
+  await ctx.reply(`✅ Часовой пояс установлен: ${tz}`);
 });
 
 remindersComposer.callbackQuery("reminders:new", async (ctx) => {
