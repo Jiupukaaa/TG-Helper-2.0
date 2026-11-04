@@ -29,9 +29,14 @@ async function ensureBotCommands(bot: Bot): Promise<void> {
   try {
     await bot.api.setMyCommands([
       { command: "start", description: "Запустить бота" },
+      { command: "menu", description: "Главное меню" },
+      { command: "today", description: "Сводка на сегодня" },
       { command: "notes", description: "Открыть заметки" },
       { command: "note", description: "Открыть заметку по номеру" },
       { command: "reminders", description: "Открыть напоминания" },
+      { command: "shifts", description: "График работы" },
+      { command: "calendar", description: "Календарь смен" },
+      { command: "saved", description: "Сохранённые ссылки, фото и GIF" },
       { command: "settimezone", description: "Установить часовой пояс" },
       { command: "cancelreminder", description: "Удалить напоминание по номеру" },
     ]);

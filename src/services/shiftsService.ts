@@ -5,8 +5,9 @@ import { isInPast } from "@/lib/time";
 
 export const SHIFT_REMINDER_OFFSETS = [-360, -240, -120, 0] as const;
 
-type ShiftRow = Omit<Shift, "startAt" | "createdAt" | "updatedAt"> & {
+type ShiftRow = Omit<Shift, "startAt" | "endAt" | "createdAt" | "updatedAt"> & {
   startAt: string;
+  endAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -19,7 +20,7 @@ type ShiftReminderRow = Omit<Reminder, "dueAt" | "processingStartedAt" | "sentAt
 };
 
 function mapShift(row: ShiftRow): Shift {
-  return { ...row, startAt: new Date(row.startAt), createdAt: new Date(row.createdAt), updatedAt: new Date(row.updatedAt) };
+  return { ...row, startAt: new Date(row.startAt), endAt: row.endAt ? new Date(row.endAt) : null, createdAt: new Date(row.createdAt), updatedAt: new Date(row.updatedAt) };
 }
 
 function mapReminder(row: ShiftReminderRow): Reminder {
@@ -69,22 +70,25 @@ function chunks<T>(items: T[], size: number): T[][] {
 async function createShiftsAtomic(
   ownerId: number,
   startAts: Date[],
+  endAts: Date[],
   timezone: string,
   name: string | null,
   cycleGroupId: string | null,
 ): Promise<Shift[]> {
+  if (startAts.length !== endAts.length) throw new Error("Для каждой смены нужно указать время окончания.");
+  startAts.forEach((startAt, index) => validateShiftEnd(startAt, endAts[index]!));
   const now = new Date().toISOString();
 
   // CTE chunks keep each statement under 100 bound parameters and a 366-day cycle under D1's ~5,000 total bindings per Worker invocation.
-  const shiftStatements = chunks(startAts, 90).map((group) => {
-    const values = group.map(() => "(?)").join(", ");
+  const shiftStatements = chunks(startAts.map((startAt, index) => ({ startAt, endAt: endAts[index]! })), 45).map((group) => {
+    const values = group.map(() => "(?, ?)").join(", ");
     return statement(
       `WITH params(name, ownerId, cycleGroupId, createdAt, updatedAt) AS (VALUES (?, ?, ?, ?, ?)),
-       shift_dates(startAt) AS (VALUES ${values})
-       INSERT INTO shifts (name, startAt, ownerId, cycleGroupId, createdAt, updatedAt)
-       SELECT p.name, d.startAt, p.ownerId, p.cycleGroupId, p.createdAt, p.updatedAt
+       shift_dates(startAt, endAt) AS (VALUES ${values})
+       INSERT INTO shifts (name, startAt, endAt, ownerId, cycleGroupId, createdAt, updatedAt)
+       SELECT p.name, d.startAt, d.endAt, p.ownerId, p.cycleGroupId, p.createdAt, p.updatedAt
        FROM shift_dates d CROSS JOIN params p`,
-      name, ownerId, cycleGroupId, now, now, ...group.map((startAt) => startAt.toISOString()),
+      name, ownerId, cycleGroupId, now, now, ...group.flatMap(({ startAt, endAt }) => [startAt.toISOString(), endAt.toISOString()]),
     );
   });
 
@@ -153,25 +157,32 @@ async function createShiftsAtomic(
   return rows.map(mapShift).sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
 }
 
-export async function createShift(ownerId: number, startAt: Date, timezone: string, name?: string | null): Promise<Shift> {
+export function validateShiftEnd(startAt: Date, endAt: Date): void {
+  if (!Number.isFinite(endAt.getTime()) || endAt <= startAt) throw new Error("Время окончания должно быть позже времени начала.");
+}
+
+export async function createShift(ownerId: number, startAt: Date, endAt: Date, timezone: string, name?: string | null): Promise<Shift> {
   validateShiftStart(startAt);
-  const created = await createShiftsAtomic(ownerId, [startAt], timezone, name?.trim() || null, null);
+  validateShiftEnd(startAt, endAt);
+  const created = await createShiftsAtomic(ownerId, [startAt], [endAt], timezone, name?.trim() || null, null);
   if (!created[0]) throw new Error("Не удалось создать смену.");
   return created[0];
 }
 
-export async function createShifts(ownerId: number, startAts: Date[], timezone: string, name?: string | null, cycleGroupId?: string | null): Promise<Shift[]> {
-  const unique = Array.from(new Map(startAts.map((value) => [value.getTime(), value])).values())
-    .sort((a, b) => a.getTime() - b.getTime());
-  if (!unique.length) throw new Error("Не выбрано ни одной смены.");
-  unique.forEach(validateShiftStart);
-  return createShiftsAtomic(ownerId, unique, timezone, name?.trim() || null, cycleGroupId ?? null);
+export async function createShifts(ownerId: number, startAts: Date[], endAts: Date[], timezone: string, name?: string | null, cycleGroupId?: string | null): Promise<Shift[]> {
+  if (startAts.length !== endAts.length) throw new Error("Для каждой смены нужно указать время окончания.");
+  const unique = new Map<number, { startAt: Date; endAt: Date }>();
+  startAts.forEach((startAt, index) => unique.set(startAt.getTime(), { startAt, endAt: endAts[index]! }));
+  const pairs = [...unique.values()].sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+  if (!pairs.length) throw new Error("Не выбрано ни одной смены.");
+  pairs.forEach(({ startAt, endAt }) => { validateShiftStart(startAt); validateShiftEnd(startAt, endAt); });
+  return createShiftsAtomic(ownerId, pairs.map((x) => x.startAt), pairs.map((x) => x.endAt), timezone, name?.trim() || null, cycleGroupId ?? null);
 }
 
 export async function listShiftsInRange(ownerId: number, startAt: Date, endAt: Date): Promise<Shift[]> {
   const rows = await all<ShiftRow>(
-    "SELECT * FROM shifts WHERE ownerId = ? AND startAt >= ? AND startAt < ? ORDER BY startAt ASC",
-    ownerId, startAt.toISOString(), endAt.toISOString(),
+    "SELECT * FROM shifts WHERE ownerId = ? AND startAt < ? AND (endAt IS NULL OR endAt > ?) ORDER BY startAt ASC",
+    ownerId, endAt.toISOString(), startAt.toISOString(),
   );
   return rows.map(mapShift);
 }
@@ -193,7 +204,8 @@ export async function listUpcomingShiftsInGroup(ownerId: number, cycleGroupId: s
 }
 
 export async function cleanupPastShifts(): Promise<number> {
-  const result = await run("DELETE FROM shifts WHERE startAt <= ?", new Date().toISOString());
+  const now = new Date().toISOString();
+  const result = await run("DELETE FROM shifts WHERE (endAt IS NOT NULL AND endAt <= ?) OR (endAt IS NULL AND startAt <= ?)", now, now);
   return result.meta.changes;
 }
 
@@ -226,10 +238,11 @@ export async function deleteAllShiftGroups(ownerId: number): Promise<number> {
   return result.meta.changes;
 }
 
-export async function updateShift(ownerId: number, shiftId: number, startAt: Date, timezone: string, name?: string | null): Promise<Shift | null> {
+export async function updateShift(ownerId: number, shiftId: number, startAt: Date, endAt: Date, timezone: string, name?: string | null): Promise<Shift | null> {
   const shift = await getOwnedShift(ownerId, shiftId);
   if (!shift || shift.startAt <= new Date()) return null;
   validateShiftStart(startAt);
+  validateShiftEnd(startAt, endAt);
   const normalizedName = name?.trim() || null;
   const now = new Date().toISOString();
   const reminders = futureShiftReminderData(ownerId, startAt, timezone, normalizedName);
@@ -239,8 +252,8 @@ export async function updateShift(ownerId: number, shiftId: number, startAt: Dat
       shiftId, ReminderStatus.PENDING, ReminderStatus.PROCESSING,
     ),
     statement(
-      "UPDATE shifts SET startAt = ?, name = ?, updatedAt = ? WHERE id = ? AND ownerId = ?",
-      startAt.toISOString(), normalizedName, now, shiftId, ownerId,
+      "UPDATE shifts SET startAt = ?, endAt = ?, name = ?, updatedAt = ? WHERE id = ? AND ownerId = ?",
+      startAt.toISOString(), endAt.toISOString(), normalizedName, now, shiftId, ownerId,
     ),
     ...reminders.map((reminder) => statement(
       `INSERT INTO reminders (text, dueAt, status, ownerId, shiftId, offsetMinutes, createdAt, updatedAt)

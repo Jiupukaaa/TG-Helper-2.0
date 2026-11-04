@@ -1,15 +1,7 @@
 // Trigger production redeploy for reminder pagination
 import { InlineKeyboard } from "grammy";
 
-export const mainMenuKeyboard = new InlineKeyboard()
-  .text("📝 Заметки", "menu:notes")
-  .text("⏰ Напоминания", "menu:reminders")
-  .row()
-  .text("☀️ Сегодня", "menu:today")
-  .text("📅 График работы", "menu:shifts")
-  .row()
-  .text("📅 Календарь", "shift:calendar")
-  .text("🔖 Сохраненки", "menu:saved");
+
 
 export const notesMenuKeyboard = new InlineKeyboard()
   .text("➕ Новая заметка", "notes:new")
