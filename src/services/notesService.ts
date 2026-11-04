@@ -21,33 +21,25 @@ export function validateNoteText(text: string): string {
   return trimmed;
 }
 
-export async function createNote(ownerId: number, text: string, sourceUpdateId?: number): Promise<Note> {
+export async function createNote(ownerId: number, text: string): Promise<Note> {
   const validated = validateNoteText(text);
   const now = new Date().toISOString();
   const rows = await all<NoteRow>(
-    `INSERT INTO notes (text, ownerId, createdAt, updatedAt, sourceUpdateId)
-     VALUES (?, ?, ?, ?, ?) ON CONFLICT(sourceUpdateId) DO NOTHING RETURNING *`,
-    validated, ownerId, now, now, sourceUpdateId ?? null,
+    "INSERT INTO notes (text, ownerId, createdAt, updatedAt) VALUES (?, ?, ?, ?) RETURNING *",
+    validated, ownerId, now, now,
   );
-  const row = rows[0] ?? (sourceUpdateId === undefined
-    ? null
-    : await first<NoteRow>("SELECT * FROM notes WHERE sourceUpdateId = ? AND ownerId = ?", sourceUpdateId, ownerId));
-  if (!row) throw new Error("Не удалось создать заметку.");
-  return mapNote(row);
+  if (!rows[0]) throw new Error("Не удалось создать заметку.");
+  return mapNote(rows[0]);
 }
 
-export async function createVoiceNote(ownerId: number, voiceFileId: string, sourceUpdateId?: number): Promise<Note> {
+export async function createVoiceNote(ownerId: number, voiceFileId: string): Promise<Note> {
   const now = new Date().toISOString();
   const rows = await all<NoteRow>(
-    `INSERT INTO notes (text, voiceFileId, ownerId, createdAt, updatedAt, sourceUpdateId)
-     VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(sourceUpdateId) DO NOTHING RETURNING *`,
-    VOICE_NOTE_TEXT, voiceFileId, ownerId, now, now, sourceUpdateId ?? null,
+    "INSERT INTO notes (text, voiceFileId, ownerId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?) RETURNING *",
+    VOICE_NOTE_TEXT, voiceFileId, ownerId, now, now,
   );
-  const row = rows[0] ?? (sourceUpdateId === undefined
-    ? null
-    : await first<NoteRow>("SELECT * FROM notes WHERE sourceUpdateId = ? AND ownerId = ?", sourceUpdateId, ownerId));
-  if (!row) throw new Error("Не удалось создать голосовую заметку.");
-  return mapNote(row);
+  if (!rows[0]) throw new Error("Не удалось создать голосовую заметку.");
+  return mapNote(rows[0]);
 }
 
 export async function replaceVoiceNote(ownerId: number, noteId: number, voiceFileId: string): Promise<Note | null> {

@@ -27,7 +27,7 @@ export function registerHandlers(bot: Bot): void {
   bot.use(notesComposer);
   bot.use(remindersComposer);
   bot.use(shiftsComposer);
-  bot.on("message:text", async (ctx) => { const user = await getOrCreateUser(BigInt(ctx.from!.id)); if (await handleNotesTextInput(ctx, user.id)) return; if (await handleReminderTextInput(ctx, user.id)) return; if (await handleShiftTextInput(ctx, user.id)) return; if (await handleSavedTextInput(ctx, user.id)) return; const text = ctx.message.text; try { const note = await createNote(user.id, text, ctx.update.update_id); const notes = await listNotes(user.id); const noteNumber = notes.findIndex((item) => item.id === note.id) + 1; await ctx.reply(`✅ Заметка #${noteNumber} сохранена.`, { reply_markup: notesMenuKeyboard }); } catch { await ctx.reply("⚠️ Не удалось сохранить заметку. Попробуйте ещё раз."); } });
+  bot.on("message:text", async (ctx) => { const user = await getOrCreateUser(BigInt(ctx.from!.id)); if (await handleNotesTextInput(ctx, user.id)) return; if (await handleReminderTextInput(ctx, user.id)) return; if (await handleShiftTextInput(ctx, user.id)) return; if (await handleSavedTextInput(ctx, user.id)) return; const text = ctx.message.text; try { const note = await createNote(user.id, text); const notes = await listNotes(user.id); const noteNumber = notes.findIndex((item) => item.id === note.id) + 1; await ctx.reply(`✅ Заметка #${noteNumber} сохранена.`, { reply_markup: notesMenuKeyboard }); } catch { await ctx.reply("⚠️ Не удалось сохранить заметку. Попробуйте ещё раз."); } });
   bot.on("message:photo", async (ctx) => { const user = await getOrCreateUser(BigInt(ctx.from!.id)); if (await handleSavedPhotoInput(ctx, user.id)) return; });
   bot.on("message:animation", async (ctx) => { const user = await getOrCreateUser(BigInt(ctx.from!.id)); if (await handleSavedGifInput(ctx, user.id)) return; });
   bot.on("message:voice", async (ctx) => {
@@ -44,7 +44,7 @@ export function registerHandlers(bot: Bot): void {
       await ctx.reply(`📝 Заметка #${noteNumber}\n\n🎙️ Голосовое сообщение заменено.`, { reply_markup: voiceNoteSavedKeyboard(updated.id) }); return;
     }
     if (session && session.step !== "IDLE") { await ctx.reply("Сейчас бот ожидает другой тип сообщения. Завершите текущий сценарий или отмените его."); return; }
-    const voiceFileId = ctx.message.voice.file_id; const note = await createVoiceNote(user.id, voiceFileId, ctx.update.update_id); const notes = await listNotes(user.id); const noteNumber = notes.findIndex((item) => item.id === note.id) + 1;
+    const voiceFileId = ctx.message.voice.file_id; const note = await createVoiceNote(user.id, voiceFileId); const notes = await listNotes(user.id); const noteNumber = notes.findIndex((item) => item.id === note.id) + 1;
     await ctx.reply(`📝 Заметка #${noteNumber}\n\n🎙️ Голосовое сообщение`, { reply_markup: voiceNoteSavedKeyboard(note.id) });
   });
   bot.on("message", async (ctx, next) => { if (ctx.message.text?.startsWith("/")) { const user = await getOrCreateUser(BigInt(ctx.from!.id)); await clearSession(user.id); await ctx.reply("Неизвестная команда. Используйте кнопки меню или /today, /notes, /reminders, /shifts, /calendar и /saved.", { reply_markup: mainMenuKeyboard }); return; } await next(); });
