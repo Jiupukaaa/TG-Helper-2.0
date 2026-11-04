@@ -26,30 +26,26 @@ export function detectSavedLink(text: string): string | null {
   return null;
 }
 
-async function createSavedItem(ownerId: number, type: SavedItemType, url: string | null, fileId: string | null, sourceUpdateId?: number): Promise<SavedItem> {
+async function createSavedItem(ownerId: number, type: SavedItemType, url: string | null, fileId: string | null): Promise<SavedItem> {
   const now = new Date().toISOString();
   const rows = await all<SavedItemRow>(
-    `INSERT INTO saved_items (type, url, fileId, ownerId, createdAt, updatedAt, sourceUpdateId)
-     VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(sourceUpdateId) DO NOTHING RETURNING *`,
-    type, url, fileId, ownerId, now, now, sourceUpdateId ?? null,
+    "INSERT INTO saved_items (type, url, fileId, ownerId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?) RETURNING *",
+    type, url, fileId, ownerId, now, now,
   );
-  const row = rows[0] ?? (sourceUpdateId === undefined
-    ? null
-    : await first<SavedItemRow>("SELECT * FROM saved_items WHERE sourceUpdateId = ? AND ownerId = ?", sourceUpdateId, ownerId));
-  if (!row) throw new Error("Не удалось сохранить элемент.");
-  return mapSavedItem(row);
+  if (!rows[0]) throw new Error("Не удалось сохранить элемент.");
+  return mapSavedItem(rows[0]);
 }
 
-export async function createSavedLink(ownerId: number, url: string, sourceUpdateId?: number): Promise<SavedItem> {
-  return createSavedItem(ownerId, "LINK", url, null, sourceUpdateId);
+export async function createSavedLink(ownerId: number, url: string): Promise<SavedItem> {
+  return createSavedItem(ownerId, "LINK", url, null);
 }
 
-export async function createSavedPhoto(ownerId: number, fileId: string, sourceUpdateId?: number): Promise<SavedItem> {
-  return createSavedItem(ownerId, "PHOTO", null, fileId, sourceUpdateId);
+export async function createSavedPhoto(ownerId: number, fileId: string): Promise<SavedItem> {
+  return createSavedItem(ownerId, "PHOTO", null, fileId);
 }
 
-export async function createSavedGif(ownerId: number, fileId: string, sourceUpdateId?: number): Promise<SavedItem> {
-  return createSavedItem(ownerId, "GIF", null, fileId, sourceUpdateId);
+export async function createSavedGif(ownerId: number, fileId: string): Promise<SavedItem> {
+  return createSavedItem(ownerId, "GIF", null, fileId);
 }
 
 export async function listSavedItems(ownerId: number): Promise<SavedItem[]> {

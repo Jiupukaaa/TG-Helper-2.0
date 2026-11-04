@@ -334,7 +334,7 @@ export async function handleNotesTextInput(ctx: any, userId: number): Promise<bo
 
   if (session.step === SessionStep.NOTE_AWAITING_TEXT) {
     try {
-      const note = await createNote(userId, text, ctx.update.update_id);
+      const note = await createNote(userId, text);
       await clearSession(userId);
       const notes = await listNotes(userId);
       const noteNumber = getNoteNumber(notes, note.id) ?? 1;
@@ -379,7 +379,7 @@ export async function handleNotesVoiceInput(ctx: any, userId: number): Promise<b
   if (!voiceFileId) return false;
 
   if (session?.step === SessionStep.NOTE_AWAITING_TEXT) {
-    const note = await createVoiceNote(userId, voiceFileId, ctx.update.update_id);
+    const note = await createVoiceNote(userId, voiceFileId);
     await clearSession(userId);
     const notes = await listNotes(userId);
     const noteNumber = getNoteNumber(notes, note.id) ?? 1;

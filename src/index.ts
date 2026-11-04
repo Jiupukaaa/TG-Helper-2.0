@@ -4,7 +4,7 @@ import { env as runtimeSecrets, setRuntimeEnv, type RuntimeEnv } from "@/lib/env
 import { setDB } from "@/db/client";
 import { claimDueReminders, markReminderFailed, markReminderSent } from "@/services/remindersService";
 import { cleanupPastShifts } from "@/services/shiftsService";
-import { claimWebhookUpdate, completeWebhookUpdate, releaseWebhookUpdate } from "@/services/webhookDedupService";
+import { claimWebhookUpdate } from "@/services/webhookDedupService";
 import { formatLocalDateTime } from "@/lib/time";
 
 type Env = RuntimeEnv;
@@ -15,6 +15,9 @@ let commandSetupAttempted = false;
 function getBot(): Bot {
   if (botInstance) return botInstance;
   const bot = new Bot(runtimeSecrets.TELEGRAM_BOT_TOKEN);
+  bot.catch(() => {
+    console.error("Telegram update processing failed.");
+  });
   registerHandlers(bot);
   botInstance = bot;
   return bot;
@@ -34,17 +37,10 @@ async function ensureBotCommands(bot: Bot): Promise<void> {
 }
 
 function isPermanentTelegramError(error: unknown): boolean {
-  let value = error as { description?: string; error_code?: number; error?: unknown } | null;
-  for (let depth = 0; depth < 3 && value?.error && typeof value.error === "object"; depth += 1) {
-    value = value.error as { description?: string; error_code?: number; error?: unknown };
-  }
-  if (value?.error_code === 400 || value?.error_code === 403) return true;
+  const value = error as { description?: string; error_code?: number };
+  if (value?.error_code === 403) return true;
   const description = value?.description ?? "";
   return /chat not found|user is deactivated/i.test(description);
-}
-
-function isWebhookTimeout(error: unknown): boolean {
-  return error instanceof Error && /Request timed out after \d+ ms/.test(error.message);
 }
 
 async function dispatchReminders(): Promise<{ cleanedShifts: number; claimed: number; sent: number; failed: number }> {
@@ -104,69 +100,28 @@ export default {
       }
 
       const updatePayload = await request.clone().json().catch(() => null) as { update_id?: unknown } | null;
-      const updateId = updatePayload && typeof updatePayload.update_id === "number" &&
-        Number.isSafeInteger(updatePayload.update_id) && updatePayload.update_id >= 0
-        ? updatePayload.update_id
-        : undefined;
-      let claimToken: string | undefined;
-
-      if (updateId !== undefined) {
+      if (updatePayload && typeof updatePayload.update_id === "number" && Number.isSafeInteger(updatePayload.update_id)) {
         try {
-          const claim = await claimWebhookUpdate(updateId);
-          if (claim.status === "PROCESSED") return new Response("ok", { status: 200 });
-          if (claim.status === "BUSY") {
-            return new Response("Update is already being processed", {
-              status: 503,
-              headers: { "retry-after": "2" },
-            });
-          }
-          claimToken = claim.token;
+          const claimed = await claimWebhookUpdate(updatePayload.update_id);
+          if (!claimed) return new Response("ok", { status: 200 });
         } catch {
           console.error("Telegram webhook deduplication failed.");
-          return new Response("Database unavailable", { status: 500 });
+          return new Response("ok", { status: 200 });
         }
       }
 
+      const bot = getBot();
+      await ensureBotCommands(bot);
       try {
-        const bot = getBot();
-        await ensureBotCommands(bot);
         const response = await webhookCallback(bot, "cloudflare-mod")(request);
-
-        if (!response.ok) {
-          if (updateId !== undefined && claimToken) await releaseWebhookUpdate(updateId, claimToken);
-          console.error("Telegram webhook returned an unsuccessful response.");
-          return new Response("Telegram update processing failed", { status: 500 });
-        }
-
-        if (updateId !== undefined && claimToken) {
-          await completeWebhookUpdate(updateId, claimToken);
+        if (response.status >= 500) {
+          console.error("Telegram webhook returned an internal error.");
+          return new Response("ok", { status: 200 });
         }
         return response;
-      } catch (error) {
-        if (updateId !== undefined && claimToken) {
-          if (isPermanentTelegramError(error)) {
-            try {
-              await completeWebhookUpdate(updateId, claimToken);
-            } catch {
-              console.error("Could not finalize a permanently rejected Telegram update.");
-              return new Response("Database unavailable", { status: 500 });
-            }
-            console.error("Telegram update was rejected by Telegram permanently.");
-            return new Response("ok", { status: 200 });
-          }
-
-          // A timed-out handler may still be running. Keep its lease to avoid starting
-          // a concurrent retry; the lease expires automatically if the Worker died.
-          if (!isWebhookTimeout(error)) {
-            try {
-              await releaseWebhookUpdate(updateId, claimToken);
-            } catch {
-              console.error("Could not release a failed Telegram update.");
-            }
-          }
-        }
+      } catch {
         console.error("Telegram update processing failed.");
-        return new Response("Telegram update processing failed", { status: 500 });
+        return new Response("ok", { status: 200 });
       }
     }
 
