@@ -29,3 +29,6 @@ async function renderToday(ctx: any, edit = true) {
 function formatTime(date: Date, timezone: string) { return DateTime.fromJSDate(date, { zone: "utc" }).setZone(timezone).toFormat("HH:mm"); }
 todayComposer.command("today", async (ctx) => renderToday(ctx, false));
 todayComposer.callbackQuery("menu:today", async (ctx) => { await ctx.answerCallbackQuery(); await renderToday(ctx); });
+
+
+todayComposer.hears("☀️ Сегодня", async (ctx) => renderToday(ctx, false));
