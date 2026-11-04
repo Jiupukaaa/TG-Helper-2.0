@@ -1,6 +1,7 @@
 ﻿{
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "tg-helper-2-0",
+  "keep_vars": true,
   "main": "src/index.ts",
   "compatibility_date": "2026-11-03",
   "d1_databases": [
