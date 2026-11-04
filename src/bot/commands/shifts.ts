@@ -53,11 +53,13 @@ async function freeTimeReport(userId: number, timezone: string, startDate: DateT
   const shifts = await listShiftsInRange(userId, rangeStart.toJSDate(), rangeEnd.toJSDate());
   const lines: string[] = [];
   let totalMinutes = 0;
+  let incompleteDays = 0;
   for (let day = rangeStart; day < rangeEnd; day = day.plus({ days: 1 })) {
     const dayStart = day.toMillis();
     const dayEnd = day.plus({ days: 1 }).toMillis();
     const daily = shifts.filter((shift) => shift.startAt.getTime() < dayEnd && (!shift.endAt || shift.endAt.getTime() > dayStart));
     if (daily.some((shift) => !shift.endAt)) {
+      incompleteDays += 1;
       lines.push(`⚠️ ${day.toFormat("dd.MM.yyyy")}: есть смена без указанного окончания — расчёт за этот день неполный.`);
       continue;
     }
@@ -89,7 +91,8 @@ async function freeTimeReport(userId: number, timezone: string, startDate: DateT
     });
     lines.push(`📅 ${day.toFormat("dd.MM.yyyy")} — ${(minutes / 60).toFixed(1)} ч свободно${periods.length ? `\n${periods.join(", ")}` : "\nСвободных интервалов нет"}`);
   }
-  return `🕒 Свободное время с ${rangeStart.toFormat("dd.MM.yyyy")} по ${endDate.toFormat("dd.MM.yyyy")}\n\n${lines.join("\n\n")}\n\nВсего: ${(totalMinutes / 60).toFixed(1)} ч.`;
+  const totalLabel = incompleteDays ? `Итого по рассчитанным дням (ещё ${incompleteDays} дн. без времени окончания):` : "Всего:";
+  return `🕒 Свободное время с ${rangeStart.toFormat("dd.MM.yyyy")} по ${endDate.toFormat("dd.MM.yyyy")}\n\n${lines.join("\n\n")}\n\n${totalLabel} ${(totalMinutes / 60).toFixed(1)} ч.`;
 }
 
 export async function handleShiftTextInput(ctx: any, userId: number): Promise<boolean> {
