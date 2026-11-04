@@ -99,26 +99,6 @@ TG Helper 2.0 предназначен для хранения личных за
 
 Не публикуйте его в GitHub или README.
 
-## 3. Клонирование и установка
-
-```bash
-git clone https://github.com/<username>/<repository>.git
-cd <repository>
-npm install
-```
-
-`postinstall` автоматически выполняет `prisma generate`.
-
-Для локальной конфигурации:
-
-```bash
-cp .env.example .env
-```
-
-На Windows PowerShell можно создать `.env` на основе `.env.example` вручную.
-
----
-
 # Neon — база данных
 
 ## 4. Создание проекта в Neon
