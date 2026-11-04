@@ -268,3 +268,6 @@ export async function handleShiftTextInput(ctx: any, userId: number): Promise<bo
   }
   return false;
 }
+
+
+shiftsComposer.hears("📅 График", async (ctx) => showScheduleMenu(ctx, "reply"));
