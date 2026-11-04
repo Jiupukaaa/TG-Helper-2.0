@@ -63,20 +63,28 @@ export function validateDueAt(dueAt: Date): void {
 type ReminderCreateOptions = {
   repeatGroupId?: string;
   repeatRule?: "daily" | "weekly" | "monthly";
+  sourceUpdateId?: number;
+  sourceIndex?: number;
 };
 
 export async function createReminder(ownerId: number, text: string, dueAt: Date, voiceFileId?: string, options?: ReminderCreateOptions): Promise<Reminder> {
   const validatedText = validateReminderText(text);
   validateDueAt(dueAt);
   const now = new Date().toISOString();
+  const sourceUpdateId = options?.sourceUpdateId ?? null;
+  const sourceIndex = options?.sourceIndex ?? 0;
   const rows = await all<ReminderRow>(
-    `INSERT INTO reminders (text, voiceFileId, dueAt, ownerId, repeatGroupId, repeatRule, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+    `INSERT INTO reminders (text, voiceFileId, dueAt, ownerId, repeatGroupId, repeatRule, createdAt, updatedAt, sourceUpdateId, sourceIndex)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(sourceUpdateId, sourceIndex) DO NOTHING RETURNING *`,
     validatedText, voiceFileId ?? null, dueAt.toISOString(), ownerId,
-    options?.repeatGroupId ?? null, options?.repeatRule ?? null, now, now,
+    options?.repeatGroupId ?? null, options?.repeatRule ?? null, now, now, sourceUpdateId, sourceIndex,
   );
-  if (!rows[0]) throw new Error("Не удалось создать напоминание.");
-  return mapReminder(rows[0]);
+  const row = rows[0] ?? (sourceUpdateId === null
+    ? null
+    : await first<ReminderRow>("SELECT * FROM reminders WHERE sourceUpdateId = ? AND sourceIndex = ? AND ownerId = ?", sourceUpdateId, sourceIndex, ownerId));
+  if (!row) throw new Error("Не удалось создать напоминание.");
+  return mapReminder(row);
 }
 
 function chunks<T>(items: T[], size: number): T[][] {
