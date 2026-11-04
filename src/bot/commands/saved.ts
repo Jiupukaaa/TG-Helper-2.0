@@ -2,7 +2,6 @@ import { Composer, InlineKeyboard } from "grammy";
 import { SessionStep } from "@/db/types";
 import { getOrCreateUser } from "@/bot/session";
 import { createSavedGif, createSavedLink, createSavedPhoto, deleteSavedItem, detectSavedLink, getOwnedSavedItem, listSavedItems } from "@/services/savedService";
-import { mainMenuKeyboard } from "@/bot/keyboards";
 
 export const savedComposer = new Composer();
 type SavedItem = { id: number; type: "LINK" | "PHOTO" | "GIF"; url: string | null; fileId: string | null };
@@ -27,7 +26,7 @@ async function renderSavedList(ctx: any, userId: number, edit = true, filter: Fi
   if (all.length === 0) {
     const text = "🔖 Сохраненки\n\nПока здесь ничего нет.\n\nОтправьте ссылку YouTube, TikTok или Twitch, фото либо GIF — я сохраню это сюда.";
     if (edit) await ctx.editMessageText(text, { reply_markup: new InlineKeyboard().text("⬅️ В главное меню", "menu:main") });
-    else await ctx.reply(text, { reply_markup: mainMenuKeyboard });
+    else await ctx.reply(text);
     return;
   }
   const counts = `Всего: ${all.length} · 🔗 ${all.filter((x) => x.type === "LINK").length} · 🖼️ ${all.filter((x) => x.type === "PHOTO").length} · 🎞️ ${all.filter((x) => x.type === "GIF").length}`;
@@ -49,7 +48,7 @@ savedComposer.callbackQuery(/^saved:filter:(ALL|LINK|PHOTO|GIF)$/, async (ctx) =
 savedComposer.callbackQuery("saved:list", async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); await renderSavedList(ctx, user.id); });
 savedComposer.callbackQuery(/^saved:send:(\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); const item = await getOwnedSavedItem(user.id, Number(ctx.match[1])); if (!item?.fileId) { await ctx.reply("Сохраненный файл не найден."); return; } if (item.type === "PHOTO") await ctx.api.sendPhoto(ctx.chat!.id, item.fileId); else if (item.type === "GIF") await ctx.api.sendAnimation(ctx.chat!.id, item.fileId); else await ctx.reply("Для этого элемента нет кнопки действия."); });
 
-savedComposer.callbackQuery("saved:delete_mode", async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); const items = await listSavedItems(user.id); if (!items.length) { await ctx.editMessageText("Сохраненок пока нет.", { reply_markup: mainMenuKeyboard }); return; } const lines = items.map((item, index) => itemLabel(item, index + 1)).join("\n\n"); const k = new InlineKeyboard(); items.forEach((item, index) => { k.text(`#${index + 1}`, `saved:delete_select:${item.id}`); if (index % 2 === 1) k.row(); }); if (items.length % 2 === 1) k.row(); k.text("⬅️ К списку", "saved:list"); await ctx.editMessageText(`🗑 Выберите номер сохраненки для удаления:\n\n${lines}`, { reply_markup: k }); });
+savedComposer.callbackQuery("saved:delete_mode", async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); const items = await listSavedItems(user.id); if (!items.length) { await ctx.editMessageText("Сохраненок пока нет.", ); return; } const lines = items.map((item, index) => itemLabel(item, index + 1)).join("\n\n"); const k = new InlineKeyboard(); items.forEach((item, index) => { k.text(`#${index + 1}`, `saved:delete_select:${item.id}`); if (index % 2 === 1) k.row(); }); if (items.length % 2 === 1) k.row(); k.text("⬅️ К списку", "saved:list"); await ctx.editMessageText(`🗑 Выберите номер сохраненки для удаления:\n\n${lines}`, { reply_markup: k }); });
 savedComposer.callbackQuery(/^saved:delete_select:(\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); const id = Number(ctx.match[1]); const item = await getOwnedSavedItem(user.id, id); if (!item) { await ctx.editMessageText("Сохраненка не найдена или уже удалена.", { reply_markup: mainMenuKeyboard }); return; } const items = await listSavedItems(user.id); const number = items.findIndex((entry) => entry.id === id) + 1; await ctx.editMessageText(`Удалить сохраненку #${number}?`, { reply_markup: new InlineKeyboard().text("✅ Да, удалить", `saved:delete_confirm:${id}`).text("❌ Отмена", "saved:list") }); });
 savedComposer.callbackQuery(/^saved:delete_confirm:(\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); const deleted = await deleteSavedItem(user.id, Number(ctx.match[1])); await renderSavedList(ctx, user.id); if (!deleted) await ctx.reply("Сохраненка уже удалена."); });
 
