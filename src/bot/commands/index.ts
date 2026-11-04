@@ -15,7 +15,7 @@ import { savedComposer, handleSavedTextInput, handleSavedPhotoInput, handleSaved
 
 export function registerHandlers(bot: Bot): void {
   bot.use(authMiddleware);
-  const mainMenuText = (timezone: string) => `🤖 TG Helper — главное меню\n\n☀️ /today — сводка на сегодня\n📝 /notes — заметки\n🔔 /reminders — напоминания\n📅 /shifts — график работы\n🗓 /calendar — календарь смен\n🔖 /saved — сохранёнки\n\n${timezone === DEFAULT_TIMEZONE ? "Сначала укажите часовой пояс: /settimezone Europe/Amsterdam" : `Часовой пояс: ${timezone}`}\n\nОткрывайте разделы через кнопку меню команд Telegram рядом с полем ввода.`;
+  const mainMenuText = (timezone: string) => `🤖 TG Helper — главное меню\n\n☀️ /today — сводка на сегодня\n📝 /notes — заметки\n🔔 /reminders — напоминания\n📅 /shifts — график работы\n🗓 /calendar — календарь смен\n🔖 /saved — сохранёнки\n\n${timezone === DEFAULT_TIMEZONE ? "Сначала укажите часовой пояс: /settimezone Europe/Amsterdam" : `Часовой пояс: ${timezone}`}\n\nОткрывайте нужный раздел кнопками меню под строкой ввода.`;
   bot.command("start", async (ctx) => { const user = await getOrCreateUser(BigInt(ctx.from!.id)); await ctx.reply("👋 Привет!\n\n" + mainMenuText(user.timezone), { reply_markup: mainMenuKeyboard }); });
   bot.command("menu", async (ctx) => { const user = await getOrCreateUser(BigInt(ctx.from!.id)); await ctx.reply(mainMenuText(user.timezone), { reply_markup: mainMenuKeyboard }); });
   bot.callbackQuery("menu:main", async (ctx) => { const user = await getOrCreateUser(BigInt(ctx.from.id)); await ctx.answerCallbackQuery(); await ctx.reply(mainMenuText(user.timezone), { reply_markup: mainMenuKeyboard }); });
