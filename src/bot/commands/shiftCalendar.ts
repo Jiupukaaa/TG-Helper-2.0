@@ -73,3 +73,6 @@ shiftCalendarComposer.callbackQuery(/^shift:calendar:month:(\d{4}-\d{2}-\d{2})$/
   const user = await getOrCreateUser(BigInt(ctx.from.id));
   await renderCalendar(ctx, user.id, ctx.match[1]);
 });
+
+
+shiftCalendarComposer.hears("🗓 Календарь", async (ctx) => { const user = await getOrCreateUser(BigInt(ctx.from!.id)); await renderCalendar(ctx, user.id, undefined, false); });
