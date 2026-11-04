@@ -181,7 +181,7 @@ export async function createShifts(ownerId: number, startAts: Date[], endAts: Da
 
 export async function listShiftsInRange(ownerId: number, startAt: Date, endAt: Date): Promise<Shift[]> {
   const rows = await all<ShiftRow>(
-    "SELECT * FROM shifts WHERE ownerId = ? AND startAt < ? AND COALESCE(endAt, startAt) > ? ORDER BY startAt ASC",
+    "SELECT * FROM shifts WHERE ownerId = ? AND startAt < ? AND (endAt IS NULL OR endAt > ?) ORDER BY startAt ASC",
     ownerId, endAt.toISOString(), startAt.toISOString(),
   );
   return rows.map(mapShift);
