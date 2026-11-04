@@ -27,20 +27,9 @@ async function ensureBotCommands(bot: Bot): Promise<void> {
   if (commandSetupAttempted) return;
   commandSetupAttempted = true;
   try {
-    await bot.api.setMyCommands([
-      { command: "start", description: "Запустить бота" },
-      { command: "menu", description: "Главное меню" },
-      { command: "today", description: "Сводка на сегодня" },
-      { command: "notes", description: "Открыть заметки" },
-      { command: "note", description: "Открыть заметку по номеру" },
-      { command: "reminders", description: "Открыть напоминания" },
-      { command: "shifts", description: "График работы" },
-      { command: "calendar", description: "Календарь смен" },
-      { command: "saved", description: "Сохранённые ссылки, фото и GIF" },
-      { command: "settimezone", description: "Установить часовой пояс" },
-      { command: "cancelreminder", description: "Удалить напоминание по номеру" },
-    ]);
-    await bot.api.setChatMenuButton({ menu_button: { type: "commands" } });
+    // Remove the legacy Telegram command list and restore the default chat menu button.
+    await bot.api.setMyCommands([]);
+    await bot.api.setChatMenuButton({ menu_button: { type: "default" } });
   } catch {
     // A Telegram API configuration error must not make the webhook unavailable.
     console.error("Telegram bot menu configuration failed.");
