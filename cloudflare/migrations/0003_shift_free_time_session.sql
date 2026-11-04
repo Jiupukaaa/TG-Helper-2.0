@@ -1,0 +1,32 @@
+-- Add the free-time calendar state while preserving existing user sessions.
+CREATE TABLE sessions_new (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  userId INTEGER NOT NULL UNIQUE,
+  step TEXT NOT NULL DEFAULT 'IDLE' CHECK (step IN (
+    'IDLE',
+    'NOTE_AWAITING_TEXT',
+    'NOTE_EDIT_AWAITING_TEXT',
+    'NOTE_VOICE_REPLACE_AWAITING',
+    'REMINDER_AWAITING_TEXT',
+    'REMINDER_AWAITING_DATETIME',
+    'SHIFT_MANUAL_AWAITING_TIME',
+    'SHIFT_MANUAL_AWAITING_NAME',
+    'SHIFT_CYCLE_AWAITING_WORK_DAYS',
+    'SHIFT_CYCLE_AWAITING_OFF_DAYS',
+    'SHIFT_CYCLE_AWAITING_START_DATE',
+    'SHIFT_CYCLE_AWAITING_TIME',
+    'SHIFT_CYCLE_AWAITING_END_DATE',
+    'SHIFT_CYCLE_AWAITING_NAME',
+    'SHIFT_EDIT_AWAITING_NAME',
+    'SHIFT_FREE_TIME_SELECTING'
+  )),
+  draft TEXT CHECK (draft IS NULL OR json_valid(draft)),
+  updatedAt TEXT NOT NULL,
+  FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+INSERT INTO sessions_new (id, userId, step, draft, updatedAt)
+SELECT id, userId, step, draft, updatedAt FROM sessions;
+
+DROP TABLE sessions;
+ALTER TABLE sessions_new RENAME TO sessions;
