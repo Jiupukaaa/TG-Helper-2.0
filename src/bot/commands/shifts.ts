@@ -4,7 +4,6 @@ import { SessionStep } from "@/db/types";
 import { getOrCreateUser, setSessionStep, clearSession, getSession } from "@/bot/session";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { createShifts, deleteAllShiftGroups, deleteShift, deleteShiftGroup, listUpcomingShifts, listUpcomingShiftsInGroup, listShiftsInRange, getOwnedShift, updateShift } from "@/services/shiftsService";
-import { mainMenuKeyboard } from "@/bot/keyboards";
 
 export const shiftsComposer = new Composer();
 const DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
@@ -39,7 +38,7 @@ shiftsComposer.callbackQuery(/^shift:edit:(\d+)$/, async (ctx) => { await ctx.an
 shiftsComposer.callbackQuery(/^shift:delete:(\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); const shift = await getOwnedShift(user.id, Number(ctx.match[1]!)); if (!shift || shift.startAt <= new Date()) { await ctx.editMessageText("Смена уже недоступна для удаления.", { reply_markup: new InlineKeyboard().text("⬅️ Назад", "shift:list") }); return; } const local = DateTime.fromJSDate(shift.startAt, { zone: "utc" }).setZone(user.timezone).toFormat("dd.MM.yyyy HH:mm"); await ctx.editMessageText(`Удалить смену ${shift.name ? `«${shift.name}» ` : ""}${local}?`, { reply_markup: new InlineKeyboard().text("✅ Да", `shift:delete:confirm:${shift.id}`).text("❌ Нет", "shift:list") }); });
 shiftsComposer.callbackQuery(/^shift:delete:confirm:(\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); const deleted = await deleteShift(user.id, Number(ctx.match[1]!)); await ctx.editMessageText(deleted ? "🗑 Смена и её будущие напоминания удалены." : "Смена не найдена или уже началась.", { reply_markup: new InlineKeyboard().text("📋 Мои смены", "shift:list").row().text("⬅️ Назад", "menu:shifts") }); });
 shiftsComposer.callbackQuery("shift:free:start", async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); await setSessionStep(user.id, SessionStep.SHIFT_CYCLE_AWAITING_START_DATE, { freeTime: true }); await ctx.editMessageText("🕒 За какую дату начать расчёт свободного времени? Введите DD.MM.YYYY", { reply_markup: new InlineKeyboard().text("❌ Отмена", "shift:cancel") }); });
-shiftsComposer.callbackQuery("shift:cancel", async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); await clearSession(user.id); await ctx.editMessageText("Отменено.", { reply_markup: mainMenuKeyboard }); });
+shiftsComposer.callbackQuery("shift:cancel", async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); await clearSession(user.id); await ctx.editMessageText("Отменено.", { reply_markup: new InlineKeyboard().text("⬅️ К графику", "menu:shifts") }); });
 
 function shiftEnd(date: DateTime, time: { hour: number; minute: number }, startAt: Date): Date {
   let end = date.set({ hour: time.hour, minute: time.minute, second: 0, millisecond: 0 });
