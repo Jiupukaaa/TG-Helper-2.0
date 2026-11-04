@@ -7,7 +7,7 @@ import { createShifts, deleteAllShiftGroups, deleteShift, deleteShiftGroup, list
 
 export const shiftsComposer = new Composer();
 const DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
-type Draft = { dates?: string[]; calendarMonth?: string; time?: string; endTime?: string; workDays?: number; offDays?: number; firstDate?: string; editShiftId?: number; pendingStarts?: string[]; pendingEnds?: string[]; freeTime?: boolean; freeStartDate?: string };
+type Draft = { dates?: string[]; calendarMonth?: string; time?: string; endTime?: string; workDays?: number; offDays?: number; firstDate?: string; editShiftId?: number; pendingStarts?: string[]; pendingEnds?: string[]; freeTime?: boolean; freeMode?: "single" | "range"; freeStartDate?: string; freeEndDate?: string };
 const draftOf = (session: any): Draft => (session?.draft as Draft | null) ?? {};
 function parseTime(input: string) { const m = /^(\d{2}):(\d{2})$/.exec(input.trim()); if (!m) return null; const hour = Number(m[1]), minute = Number(m[2]); return hour <= 23 && minute <= 59 ? { hour, minute } : null; }
 function parseDate(input: string, timezone: string) { const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(input.trim()); if (!m) return null; const dt = DateTime.fromObject({ day: Number(m[1]), month: Number(m[2]), year: Number(m[3]) }, { zone: timezone }); return dt.isValid ? dt.startOf("day") : null; }
@@ -15,6 +15,60 @@ function shiftStart(date: DateTime, time: { hour: number; minute: number }) { re
 function parseShiftName(input: string) { const value = input.trim(); if (!value || value === "-") return null; return value.length <= 100 ? value : null; }
 function calendarKeyboard(month: DateTime, selected: string[]) { const keyboard = new InlineKeyboard(); const daysInMonth = month.daysInMonth ?? 0; keyboard.text("‹", `shift:manual:month:${month.minus({ months: 1 }).toFormat("yyyy-MM-dd")}`).text(month.toFormat("LLLL yyyy"), "shift:manual:noop").text("›", `shift:manual:month:${month.plus({ months: 1 }).toFormat("yyyy-MM-dd")}`).row(); DAY_NAMES.forEach((d) => keyboard.text(d, "shift:manual:noop")); keyboard.row(); for (let i = 1; i < month.startOf("month").weekday; i++) keyboard.text(" ", "shift:manual:noop"); for (let day = 1; day <= daysInMonth; day++) { const date = month.set({ day }), key = date.toFormat("yyyy-MM-dd"); keyboard.text(selected.includes(key) ? `✅${day}` : String(day), `shift:manual:date:${key}`); if (date.weekday === 7) keyboard.row(); } if (month.endOf("month").weekday !== 7) keyboard.row(); keyboard.text(`Готово (${selected.length})`, "shift:manual:done").row().text("❌ Отмена", "shift:cancel"); return keyboard; }
 async function showManualCalendar(ctx: any, userId: number, monthInput?: string) { const draft = draftOf(await getSession(userId)); const month = DateTime.fromISO(monthInput ?? draft.calendarMonth ?? DateTime.now().toFormat("yyyy-MM-01"), { zone: "utc" }).startOf("month"); await ctx.editMessageText("📅 Выберите одну или несколько дат смен. Выбранные даты отмечены ✅:", { reply_markup: calendarKeyboard(month.isValid ? month : DateTime.now().startOf("month"), draft.dates ?? []) }); }
+function freeTimeCalendarKeyboard(month: DateTime, startDate?: string, endDate?: string) {
+  const keyboard = new InlineKeyboard();
+  keyboard.text("‹", `shift:free:month:${month.minus({ months: 1 }).toFormat("yyyy-MM-01")}`)
+    .text(month.toFormat("LLLL yyyy"), "shift:free:noop")
+    .text("›", `shift:free:month:${month.plus({ months: 1 }).toFormat("yyyy-MM-01")}`)
+    .row();
+  DAY_NAMES.forEach((day) => keyboard.text(day, "shift:free:noop"));
+  keyboard.row();
+  for (let i = 1; i < month.startOf("month").weekday; i++) keyboard.text(" ", "shift:free:noop");
+  for (let day = 1; day <= (month.daysInMonth ?? 0); day++) {
+    const date = month.set({ day });
+    const iso = date.toFormat("yyyy-MM-dd");
+    const selected = iso === startDate || iso === endDate;
+    keyboard.text(selected ? `🟢${day}` : String(day), `shift:free:date:${iso}`);
+    if (date.weekday === 7) keyboard.row();
+  }
+  if (month.endOf("month").weekday !== 7) keyboard.row();
+  keyboard.row().text("❌ Отмена", "shift:cancel");
+  return keyboard;
+}
+async function showFreeTimeCalendar(ctx: any, userId: number, monthInput?: string) {
+  const session = await getSession(userId);
+  const draft = draftOf(session);
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const month = DateTime.fromISO(
+    monthInput ?? draft.calendarMonth ?? DateTime.now().setZone(user.timezone).toFormat("yyyy-MM-01"),
+    { zone: user.timezone },
+  ).startOf("month");
+  const prompt = draft.freeMode === "single"
+    ? "🕒 Выберите дату для расчёта свободного времени:"
+    : draft.freeStartDate
+      ? `🕒 Начало периода: ${DateTime.fromISO(draft.freeStartDate, { zone: user.timezone }).toFormat("dd.MM.yyyy")}\\nТеперь выберите дату окончания:`
+      : "🕒 Выберите дату начала периода:";
+  await ctx.editMessageText(prompt, {
+    reply_markup: freeTimeCalendarKeyboard(month, draft.freeStartDate, draft.freeEndDate),
+  });
+}
+async function showFreeTimeRangeConfirmation(ctx: any, userId: number) {
+  const session = await getSession(userId);
+  const draft = draftOf(session);
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  if (!draft.freeStartDate || !draft.freeEndDate) {
+    await ctx.editMessageText("⚠️ Не удалось получить выбранный период. Начните выбор заново.", {
+      reply_markup: new InlineKeyboard().text("↩️ Выбрать период", "shift:free:change").row().text("❌ Отмена", "shift:cancel"),
+    });
+    return;
+  }
+  const start = DateTime.fromISO(draft.freeStartDate, { zone: user.timezone });
+  const end = DateTime.fromISO(draft.freeEndDate, { zone: user.timezone });
+  await ctx.editMessageText(
+    `🕒 Проверьте выбранный период:\\n\\nС ${start.toFormat("dd.MM.yyyy")} по ${end.toFormat("dd.MM.yyyy")}\\n\\nПодтвердить расчёт?`,
+    { reply_markup: new InlineKeyboard().text("✅ Подтвердить", "shift:free:confirm").row().text("✏️ Изменить даты", "shift:free:change").row().text("❌ Отмена", "shift:cancel") },
+  );
+}
 async function showScheduleMenu(ctx: any, mode: "reply" | "edit") { const keyboard = new InlineKeyboard().text("➕ Выбрать даты", "shift:manual:start").row().text("🔄 Настроить график", "shift:cycle:start").row().text("📋 Мои смены", "shift:list").row().text("🕒 Свободное время", "shift:free:start").row().text("⬅️ Назад", "menu:main"); if (mode === "reply") await ctx.reply("📅 График работы:", { reply_markup: keyboard }); else await ctx.editMessageText("📅 График работы:", { reply_markup: keyboard }); }
 shiftsComposer.command("shifts", async (ctx) => showScheduleMenu(ctx, "reply"));
 shiftsComposer.callbackQuery("menu:shifts", async (ctx) => { await ctx.answerCallbackQuery(); await showScheduleMenu(ctx, "edit"); });
@@ -37,7 +91,99 @@ shiftsComposer.callbackQuery(/^shift:group:delete:confirm:([a-f0-9-]+)$/, async 
 shiftsComposer.callbackQuery(/^shift:edit:(\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); const shift = await getOwnedShift(user.id, Number(ctx.match[1]!)); if (!shift || shift.startAt <= new Date()) { await ctx.editMessageText("Смена уже недоступна для изменения.", { reply_markup: new InlineKeyboard().text("⬅️ Назад", "shift:list") }); return; } await setSessionStep(user.id, SessionStep.SHIFT_MANUAL_AWAITING_TIME, { editShiftId: shift.id }); await ctx.editMessageText("✏️ Введите новую дату и время начала в формате DD.MM.YYYY HH:mm\nНапример: 25.09.2026 14:00", { reply_markup: new InlineKeyboard().text("❌ Отмена", "shift:cancel") }); });
 shiftsComposer.callbackQuery(/^shift:delete:(\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); const shift = await getOwnedShift(user.id, Number(ctx.match[1]!)); if (!shift || shift.startAt <= new Date()) { await ctx.editMessageText("Смена уже недоступна для удаления.", { reply_markup: new InlineKeyboard().text("⬅️ Назад", "shift:list") }); return; } const local = DateTime.fromJSDate(shift.startAt, { zone: "utc" }).setZone(user.timezone).toFormat("dd.MM.yyyy HH:mm"); await ctx.editMessageText(`Удалить смену ${shift.name ? `«${shift.name}» ` : ""}${local}?`, { reply_markup: new InlineKeyboard().text("✅ Да", `shift:delete:confirm:${shift.id}`).text("❌ Нет", "shift:list") }); });
 shiftsComposer.callbackQuery(/^shift:delete:confirm:(\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); const deleted = await deleteShift(user.id, Number(ctx.match[1]!)); await ctx.editMessageText(deleted ? "🗑 Смена и её будущие напоминания удалены." : "Смена не найдена или уже началась.", { reply_markup: new InlineKeyboard().text("📋 Мои смены", "shift:list").row().text("⬅️ Назад", "menu:shifts") }); });
-shiftsComposer.callbackQuery("shift:free:start", async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); await setSessionStep(user.id, SessionStep.SHIFT_CYCLE_AWAITING_START_DATE, { freeTime: true }); await ctx.editMessageText("🕒 За какую дату начать расчёт свободного времени? Введите DD.MM.YYYY", { reply_markup: new InlineKeyboard().text("❌ Отмена", "shift:cancel") }); });
+shiftsComposer.callbackQuery("shift:free:start", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  await setSessionStep(user.id, SessionStep.SHIFT_CYCLE_AWAITING_START_DATE, {});
+  await ctx.editMessageText("🕒 Как выбрать период для расчёта?", {
+    reply_markup: new InlineKeyboard()
+      .text("📅 Одна дата", "shift:free:mode:single")
+      .row().text("📆 Период дат", "shift:free:mode:range")
+      .row().text("❌ Отмена", "shift:cancel"),
+  });
+});
+shiftsComposer.callbackQuery(/^shift:free:mode:(single|range)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const mode = ctx.match[1] as "single" | "range";
+  const month = DateTime.now().setZone(user.timezone).startOf("month").toFormat("yyyy-MM-01");
+  await setSessionStep(user.id, SessionStep.SHIFT_CYCLE_AWAITING_START_DATE, {
+    freeTime: true, freeMode: mode, calendarMonth: month,
+  });
+  await showFreeTimeCalendar(ctx, user.id, month);
+});
+shiftsComposer.callbackQuery("shift:free:noop", async (ctx) => { await ctx.answerCallbackQuery(); });
+shiftsComposer.callbackQuery(/^shift:free:month:(\\d{4}-\\d{2}-\\d{2})$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const draft = draftOf(await getSession(user.id));
+  const monthValue = ctx.match[1]!;
+  await setSessionStep(user.id, SessionStep.SHIFT_CYCLE_AWAITING_START_DATE, { ...draft, calendarMonth: monthValue });
+  await showFreeTimeCalendar(ctx, user.id, monthValue);
+});
+shiftsComposer.callbackQuery(/^shift:free:date:(\\d{4}-\\d{2}-\\d{2})$/, async (ctx) => {
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const draft = draftOf(await getSession(user.id));
+  const selected = DateTime.fromISO(ctx.match[1]!, { zone: user.timezone }).startOf("day");
+  if (!selected.isValid || !draft.freeMode) {
+    await ctx.answerCallbackQuery({ text: "Сценарий выбора даты устарел. Откройте раздел заново.", show_alert: true });
+    return;
+  }
+  if (draft.freeMode === "single") {
+    await ctx.answerCallbackQuery();
+    const report = await freeTimeReport(user.id, user.timezone, selected, selected);
+    await clearSession(user.id);
+    await ctx.editMessageText(report, { reply_markup: new InlineKeyboard().text("⬅️ К графику", "menu:shifts") });
+    return;
+  }
+  if (!draft.freeStartDate) {
+    await ctx.answerCallbackQuery();
+    await setSessionStep(user.id, SessionStep.SHIFT_CYCLE_AWAITING_START_DATE, {
+      ...draft, freeStartDate: selected.toISODate()!, freeEndDate: undefined,
+    });
+    await showFreeTimeCalendar(ctx, user.id, draft.calendarMonth);
+    return;
+  }
+  const start = DateTime.fromISO(draft.freeStartDate, { zone: user.timezone }).startOf("day");
+  if (selected < start) {
+    await ctx.answerCallbackQuery({ text: "Дата окончания не может быть раньше начала.", show_alert: true });
+    return;
+  }
+  if (selected.diff(start, "days").days > 365) {
+    await ctx.answerCallbackQuery({ text: "Период не должен превышать 366 дней.", show_alert: true });
+    return;
+  }
+  await ctx.answerCallbackQuery();
+  await setSessionStep(user.id, SessionStep.SHIFT_CYCLE_AWAITING_START_DATE, {
+    ...draft, freeEndDate: selected.toISODate()!,
+  });
+  await showFreeTimeRangeConfirmation(ctx, user.id);
+});
+shiftsComposer.callbackQuery("shift:free:change", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const draft = draftOf(await getSession(user.id));
+  await setSessionStep(user.id, SessionStep.SHIFT_CYCLE_AWAITING_START_DATE, {
+    ...draft, freeStartDate: undefined, freeEndDate: undefined,
+  });
+  await showFreeTimeCalendar(ctx, user.id, draft.calendarMonth);
+});
+shiftsComposer.callbackQuery("shift:free:confirm", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  const draft = draftOf(await getSession(user.id));
+  const start = draft.freeStartDate ? DateTime.fromISO(draft.freeStartDate, { zone: user.timezone }).startOf("day") : null;
+  const end = draft.freeEndDate ? DateTime.fromISO(draft.freeEndDate, { zone: user.timezone }).startOf("day") : null;
+  if (!start?.isValid || !end?.isValid || end < start || end.diff(start, "days").days > 365) {
+    await ctx.editMessageText("⚠️ Выбранный период некорректен. Выберите даты заново.", {
+      reply_markup: new InlineKeyboard().text("↩️ Выбрать период", "shift:free:change").row().text("❌ Отмена", "shift:cancel"),
+    });
+    return;
+  }
+  const report = await freeTimeReport(user.id, user.timezone, start, end);
+  await clearSession(user.id);
+  await ctx.editMessageText(report, { reply_markup: new InlineKeyboard().text("⬅️ К графику", "menu:shifts") });
+});
 shiftsComposer.callbackQuery("shift:cancel", async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); await clearSession(user.id); await ctx.editMessageText("Отменено.", { reply_markup: new InlineKeyboard().text("⬅️ К графику", "menu:shifts") }); });
 
 function shiftEnd(date: DateTime, time: { hour: number; minute: number }, startAt: Date): Date {
@@ -101,26 +247,6 @@ export async function handleShiftTextInput(ctx: any, userId: number): Promise<bo
   if (!text) return false;
   const draft = draftOf(session);
   const user = await getOrCreateUser(BigInt(ctx.from.id));
-
-  if (session.step === SessionStep.SHIFT_CYCLE_AWAITING_START_DATE && draft.freeTime) {
-    const start = parseDate(text, user.timezone);
-    if (!start) { await ctx.reply("⚠️ Неверная дата. Используйте DD.MM.YYYY."); return true; }
-    await setSessionStep(userId, SessionStep.SHIFT_CYCLE_AWAITING_END_DATE, { freeTime: true, freeStartDate: start.toISODate()! });
-    await ctx.reply("Введите последнюю дату периода (DD.MM.YYYY).");
-    return true;
-  }
-
-  if (session.step === SessionStep.SHIFT_CYCLE_AWAITING_END_DATE && draft.freeTime) {
-    const end = parseDate(text, user.timezone);
-    const start = draft.freeStartDate ? DateTime.fromISO(draft.freeStartDate, { zone: user.timezone }) : null;
-    if (!end || !start?.isValid) { await ctx.reply("⚠️ Не удалось распознать даты периода. Начните заново через /shifts."); return true; }
-    if (end < start) { await ctx.reply("Конец периода не может быть раньше начала."); return true; }
-    if (end.diff(start, "days").days > 365) { await ctx.reply("Период не должен превышать 366 дней."); return true; }
-    const report = await freeTimeReport(userId, user.timezone, start, end);
-    await clearSession(userId);
-    await ctx.reply(report, { reply_markup: new InlineKeyboard().text("⬅️ К графику", "menu:shifts") });
-    return true;
-  }
 
   if (session.step === SessionStep.SHIFT_MANUAL_AWAITING_TIME && draft.editShiftId) {
     if (!draft.pendingStarts?.length) {
