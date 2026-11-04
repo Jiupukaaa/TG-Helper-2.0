@@ -1,5 +1,5 @@
 // Trigger production redeploy for reminder pagination
-import { InlineKeyboard } from "grammy";
+import { InlineKeyboard, Keyboard } from "grammy";
 
 
 
@@ -70,3 +70,11 @@ export function reminderEditFieldKeyboard(reminderId: number): InlineKeyboard {
 export function reminderItemKeyboard(reminderId: number): InlineKeyboard { return reminderManageKeyboard(reminderId); }
 export const cancelKeyboard = new InlineKeyboard().text("❌ Отмена", "session:cancel");
 export function confirmDeleteKeyboard(kind: "note" | "reminder", id: number): InlineKeyboard { return new InlineKeyboard().text("✅ Да, удалить", `${kind}s:delete_confirm:${id}`).text("❌ Отмена", kind === "note" ? "notes:list" : "reminders:list"); }
+
+
+// Persistent Telegram reply keyboard. Each button sends the existing bot command.
+export const mainMenuKeyboard = new Keyboard()
+  .text("/today").text("/shifts").row()
+  .text("/calendar").text("/notes").row()
+  .text("/reminders").text("/saved")
+  .resized();
