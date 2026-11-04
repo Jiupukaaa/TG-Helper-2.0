@@ -74,7 +74,7 @@ export function confirmDeleteKeyboard(kind: "note" | "reminder", id: number): In
 
 // Persistent Telegram reply keyboard. Each button sends the existing bot command.
 export const mainMenuKeyboard = new Keyboard()
-  .text("/today").text("/shifts").row()
-  .text("/calendar").text("/notes").row()
-  .text("/reminders").text("/saved")
+  .text("☀️ Сегодня").text("📅 График").row()
+  .text("🗓 Календарь").text("📝 Заметки").row()
+  .text("🔔 Напоминания").text("🔖 Сохранёнки")
   .resized();
