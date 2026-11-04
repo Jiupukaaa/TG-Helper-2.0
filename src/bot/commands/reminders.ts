@@ -114,7 +114,7 @@ remindersComposer.callbackQuery(/^reminders:repeat:(none|daily|weekly|monthly)$/
   const draft = (session.draft as ReminderDraft | null) ?? {};
   if (!draft.text || !draft.dueAt) { await ctx.editMessageText("Не удалось собрать напоминание. Начните заново.", { reply_markup: remindersMenuKeyboard }); return; }
   if (rule === "none") {
-    const reminder = await createReminder(user.id, draft.text, new Date(draft.dueAt), draft.voiceFileId);
+    const reminder = await createReminder(user.id, draft.text, new Date(draft.dueAt), draft.voiceFileId, { sourceUpdateId: ctx.update.update_id });
     const reminders = await listReminders(user.id); const n = getReminderNumber(reminders, reminder.id) ?? 1;
     await clearSession(user.id); await ctx.editMessageText(`✅ Напоминание #${n} создано на ${formatLocalDateTime(reminder.dueAt, user.timezone)}.`, { reply_markup: remindersMenuKeyboard });
     return;
@@ -385,8 +385,15 @@ export async function handleReminderTextInput(ctx: any, userId: number): Promise
         reminders.push(next.toJSDate());
       }
       try {
-        const repeatGroupId = crypto.randomUUID();
-        for (const dueAt of reminders) await createReminder(userId, draft.text, dueAt, draft.voiceFileId, { repeatGroupId, repeatRule: rule });
+        const repeatGroupId = `telegram-${ctx.update.update_id}`;
+        for (const [index, dueAt] of reminders.entries()) {
+          await createReminder(userId, draft.text, dueAt, draft.voiceFileId, {
+            repeatGroupId,
+            repeatRule: rule,
+            sourceUpdateId: ctx.update.update_id,
+            sourceIndex: index,
+          });
+        }
         await clearSession(userId);
         await ctx.reply(`✅ Создано повторяющихся напоминаний: ${count}.\nПервое: ${formatLocalDateTime(reminders[0]!, user.timezone)}\nПоследнее: ${formatLocalDateTime(reminders[reminders.length - 1]!, user.timezone)}`, { reply_markup: remindersMenuKeyboard });
       } catch (err) { if (err instanceof ValidationError) await ctx.reply(`⚠️ ${err.message}`, { reply_markup: cancelKeyboard }); else throw err; }
