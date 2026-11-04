@@ -94,7 +94,7 @@ shiftsComposer.callbackQuery(/^shift:delete:confirm:(\d+)$/, async (ctx) => { aw
 shiftsComposer.callbackQuery("shift:free:start", async (ctx) => {
   await ctx.answerCallbackQuery();
   const user = await getOrCreateUser(BigInt(ctx.from.id));
-  await setSessionStep(user.id, SessionStep.SHIFT_CYCLE_AWAITING_START_DATE, {});
+  await setSessionStep(user.id, SessionStep.SHIFT_FREE_TIME_SELECTING, {});
   await ctx.editMessageText("🕒 Как выбрать период для расчёта?", {
     reply_markup: new InlineKeyboard()
       .text("📅 Одна дата", "shift:free:mode:single")
@@ -107,7 +107,7 @@ shiftsComposer.callbackQuery(/^shift:free:mode:(single|range)$/, async (ctx) => 
   const user = await getOrCreateUser(BigInt(ctx.from.id));
   const mode = ctx.match[1] as "single" | "range";
   const month = DateTime.now().setZone(user.timezone).startOf("month").toFormat("yyyy-MM-01");
-  await setSessionStep(user.id, SessionStep.SHIFT_CYCLE_AWAITING_START_DATE, {
+  await setSessionStep(user.id, SessionStep.SHIFT_FREE_TIME_SELECTING, {
     freeTime: true, freeMode: mode, calendarMonth: month,
   });
   await showFreeTimeCalendar(ctx, user.id, month);
@@ -118,7 +118,7 @@ shiftsComposer.callbackQuery(/^shift:free:month:(\d{4}-\d{2}-\d{2})$/, async (ct
   const user = await getOrCreateUser(BigInt(ctx.from.id));
   const draft = draftOf(await getSession(user.id));
   const monthValue = ctx.match[1]!;
-  await setSessionStep(user.id, SessionStep.SHIFT_CYCLE_AWAITING_START_DATE, { ...draft, calendarMonth: monthValue });
+  await setSessionStep(user.id, SessionStep.SHIFT_FREE_TIME_SELECTING, { ...draft, calendarMonth: monthValue });
   await showFreeTimeCalendar(ctx, user.id, monthValue);
 });
 shiftsComposer.callbackQuery(/^shift:free:date:(\d{4}-\d{2}-\d{2})$/, async (ctx) => {
@@ -138,7 +138,7 @@ shiftsComposer.callbackQuery(/^shift:free:date:(\d{4}-\d{2}-\d{2})$/, async (ctx
   }
   if (!draft.freeStartDate) {
     await ctx.answerCallbackQuery();
-    await setSessionStep(user.id, SessionStep.SHIFT_CYCLE_AWAITING_START_DATE, {
+    await setSessionStep(user.id, SessionStep.SHIFT_FREE_TIME_SELECTING, {
       ...draft, freeStartDate: selected.toISODate()!, freeEndDate: undefined,
     });
     await showFreeTimeCalendar(ctx, user.id, draft.calendarMonth);
@@ -154,7 +154,7 @@ shiftsComposer.callbackQuery(/^shift:free:date:(\d{4}-\d{2}-\d{2})$/, async (ctx
     return;
   }
   await ctx.answerCallbackQuery();
-  await setSessionStep(user.id, SessionStep.SHIFT_CYCLE_AWAITING_START_DATE, {
+  await setSessionStep(user.id, SessionStep.SHIFT_FREE_TIME_SELECTING, {
     ...draft, freeEndDate: selected.toISODate()!,
   });
   await showFreeTimeRangeConfirmation(ctx, user.id);
@@ -163,7 +163,7 @@ shiftsComposer.callbackQuery("shift:free:change", async (ctx) => {
   await ctx.answerCallbackQuery();
   const user = await getOrCreateUser(BigInt(ctx.from.id));
   const draft = draftOf(await getSession(user.id));
-  await setSessionStep(user.id, SessionStep.SHIFT_CYCLE_AWAITING_START_DATE, {
+  await setSessionStep(user.id, SessionStep.SHIFT_FREE_TIME_SELECTING, {
     ...draft, freeStartDate: undefined, freeEndDate: undefined,
   });
   await showFreeTimeCalendar(ctx, user.id, draft.calendarMonth);
@@ -247,6 +247,11 @@ export async function handleShiftTextInput(ctx: any, userId: number): Promise<bo
   if (!text) return false;
   const draft = draftOf(session);
   const user = await getOrCreateUser(BigInt(ctx.from.id));
+
+  if (session.step === SessionStep.SHIFT_FREE_TIME_SELECTING) {
+    await ctx.reply("Выберите дату кнопкой в календаре. Для отмены нажмите «Отмена».");
+    return true;
+  }
 
   if (session.step === SessionStep.SHIFT_MANUAL_AWAITING_TIME && draft.editShiftId) {
     if (!draft.pendingStarts?.length) {
