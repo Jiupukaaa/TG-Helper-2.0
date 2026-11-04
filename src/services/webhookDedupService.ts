@@ -20,7 +20,7 @@ export async function claimWebhookUpdate(updateId: number): Promise<WebhookUpdat
   const token = crypto.randomUUID();
 
   await run(
-    "DELETE FROM webhook_dedup WHERE status = 'PROCESSED' AND processedAt < ?",
+    "DELETE FROM webhook_dedup WHERE processedAt < ?",
     cutoff,
   );
 
@@ -65,7 +65,7 @@ export async function completeWebhookUpdate(updateId: number, token: string): Pr
 
 export async function releaseWebhookUpdate(updateId: number, token: string): Promise<void> {
   await run(
-    "DELETE FROM webhook_dedup WHERE updateId = ? AND status = 'PROCESSING' AND lockToken = ?",
-    updateId, token,
+    "UPDATE webhook_dedup SET lockedUntil = ?, lockToken = NULL WHERE updateId = ? AND status = 'PROCESSING' AND lockToken = ?",
+    new Date(0).toISOString(), updateId, token,
   );
 }
