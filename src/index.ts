@@ -15,8 +15,8 @@ let commandSetupAttempted = false;
 function getBot(): Bot {
   if (botInstance) return botInstance;
   const bot = new Bot(runtimeSecrets.TELEGRAM_BOT_TOKEN);
-  bot.catch(() => {
-    console.error("Telegram update processing failed.");
+  bot.catch((err) => {
+    console.error("Telegram update processing failed:", err.message);
   });
   registerHandlers(bot);
   botInstance = bot;
@@ -27,12 +27,10 @@ async function ensureBotCommands(bot: Bot): Promise<void> {
   if (commandSetupAttempted) return;
   commandSetupAttempted = true;
   try {
-    // Remove the legacy Telegram command list and restore the default chat menu button.
     await bot.api.setMyCommands([]);
     await bot.api.setChatMenuButton({ menu_button: { type: "default" } });
-  } catch {
-    // A Telegram API configuration error must not make the webhook unavailable.
-    console.error("Telegram bot menu configuration failed.");
+  } catch (error) {
+    console.error("Telegram bot menu configuration failed:", error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -59,7 +57,7 @@ async function dispatchReminders(): Promise<{ cleanedShifts: number; claimed: nu
         });
       } else {
         const localTime = formatLocalDateTime(reminder.dueAt, reminder.owner.timezone);
-        await bot.api.sendMessage(chatId, `⏰ Напоминание (${localTime}):\n${reminder.text}`);
+        await bot.api.sendMessage(chatId, `⏰ Напоминание (${localTime}):\\n${reminder.text}`);
       }
       await markReminderSent(reminder.id);
       sent += 1;
@@ -67,7 +65,7 @@ async function dispatchReminders(): Promise<{ cleanedShifts: number; claimed: nu
       const message = error instanceof Error ? error.message : "unknown error";
       await markReminderFailed(reminder.id, message, isPermanentTelegramError(error));
       failed += 1;
-      console.error("Reminder delivery failed for reminder", reminder.id);
+      console.error("Reminder delivery failed for reminder", reminder.id, message);
     }
   }
 
@@ -84,8 +82,8 @@ export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     try {
       await initializeRequest(env);
-    } catch {
-      console.error("D1 initialization failed.");
+    } catch (error) {
+      console.error("D1 initialization failed:", error instanceof Error ? error.message : String(error));
       return new Response("Database unavailable", { status: 500 });
     }
 
@@ -104,9 +102,13 @@ export default {
         try {
           const claimed = await claimWebhookUpdate(updatePayload.update_id);
           if (!claimed) return new Response("ok", { status: 200 });
-        } catch {
-          console.error("Telegram webhook deduplication failed.");
-          return new Response("ok", { status: 200 });
+        } catch (error) {
+          // Deduplication is best-effort: never acknowledge and silently discard a
+          // callback/message update just because the deduplication table is out of sync.
+          console.error(
+            "Telegram webhook deduplication failed; processing update without deduplication:",
+            error instanceof Error ? error.message : String(error),
+          );
         }
       }
 
@@ -119,8 +121,8 @@ export default {
           return new Response("ok", { status: 200 });
         }
         return response;
-      } catch {
-        console.error("Telegram update processing failed.");
+      } catch (error) {
+        console.error("Telegram update processing failed:", error instanceof Error ? error.message : String(error));
         return new Response("ok", { status: 200 });
       }
     }
@@ -137,8 +139,8 @@ export default {
       try {
         await initializeRequest(env);
         await dispatchReminders();
-      } catch {
-        console.error("Scheduled reminder dispatch failed.");
+      } catch (error) {
+        console.error("Scheduled reminder dispatch failed:", error instanceof Error ? error.message : String(error));
       }
     })());
   },
