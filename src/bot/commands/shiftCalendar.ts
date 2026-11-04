@@ -6,7 +6,7 @@ import { listShiftsInRange } from "@/services/shiftsService";
 export const shiftCalendarComposer = new Composer();
 const DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
-async function renderCalendar(ctx: any, userId: number, monthIso?: string) {
+async function renderCalendar(ctx: any, userId: number, monthIso?: string, edit = true) {
   const user = await getOrCreateUser(BigInt(ctx.from.id));
   const month = DateTime.fromISO(
     monthIso ?? DateTime.now().setZone(user.timezone).toFormat("yyyy-MM-01"),
@@ -49,10 +49,10 @@ async function renderCalendar(ctx: any, userId: number, monthIso?: string) {
     .join("\n");
   const text = `📅 Календарь смен\n\n🟢 — есть смена\n\n${upcoming ? `Ближайшие в этом месяце:\n${upcoming}` : "В этом месяце смен нет."}`;
   k.row().text("📋 Мои смены", "shift:list").text("🏠 Главная", "menu:main");
-  await ctx.editMessageText(text, { reply_markup: k });
+  if (edit) await ctx.editMessageText(text, { reply_markup: k });\n  else await ctx.reply(text, { reply_markup: k });
 }
 
-shiftCalendarComposer.callbackQuery("shift:calendar", async (ctx) => {
+shiftCalendarComposer.command("calendar", async (ctx) => {\n  const user = await getOrCreateUser(BigInt(ctx.from!.id));\n  await renderCalendar(ctx, user.id, undefined, false);\n});\n\nshiftCalendarComposer.callbackQuery("shift:calendar", async (ctx) => {
   await ctx.answerCallbackQuery();
   const user = await getOrCreateUser(BigInt(ctx.from.id));
   await renderCalendar(ctx, user.id);
