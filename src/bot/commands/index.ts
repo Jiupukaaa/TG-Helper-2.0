@@ -2,7 +2,7 @@ import { Bot } from "grammy";
 import { SessionStep } from "@/db/types";
 import { authMiddleware } from "@/bot/middleware/auth";
 import { getOrCreateUser, clearSession, getSession, setSessionStep } from "@/bot/session";
-import { voiceNoteSavedKeyboard, notesMenuKeyboard, cancelKeyboard } from "@/bot/keyboards";
+import { voiceNoteSavedKeyboard, notesMenuKeyboard, cancelKeyboard, mainMenuKeyboard } from "@/bot/keyboards";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { createNote, createVoiceNote, getOwnedNote, listNotes, replaceVoiceNote } from "@/services/notesService";
 import { notesComposer, handleNotesTextInput, handleNotesVoiceInput } from "./notes";
@@ -16,9 +16,9 @@ import { savedComposer, handleSavedTextInput, handleSavedPhotoInput, handleSaved
 export function registerHandlers(bot: Bot): void {
   bot.use(authMiddleware);
   const mainMenuText = (timezone: string) => `🤖 TG Helper — главное меню\n\n☀️ /today — сводка на сегодня\n📝 /notes — заметки\n🔔 /reminders — напоминания\n📅 /shifts — график работы\n🗓 /calendar — календарь смен\n🔖 /saved — сохранёнки\n\n${timezone === DEFAULT_TIMEZONE ? "Сначала укажите часовой пояс: /settimezone Europe/Amsterdam" : `Часовой пояс: ${timezone}`}\n\nОткрывайте разделы через кнопку меню команд Telegram рядом с полем ввода.`;
-  bot.command("start", async (ctx) => { const user = await getOrCreateUser(BigInt(ctx.from!.id)); await ctx.reply("👋 Привет!\n\n" + mainMenuText(user.timezone), { reply_markup: { remove_keyboard: true } }); });
-  bot.command("menu", async (ctx) => { const user = await getOrCreateUser(BigInt(ctx.from!.id)); await ctx.reply(mainMenuText(user.timezone), { reply_markup: { remove_keyboard: true } }); });
-  bot.callbackQuery("menu:main", async (ctx) => { const user = await getOrCreateUser(BigInt(ctx.from.id)); await ctx.answerCallbackQuery(); await ctx.editMessageText(mainMenuText(user.timezone), { reply_markup: { inline_keyboard: [] } }); });
+  bot.command("start", async (ctx) => { const user = await getOrCreateUser(BigInt(ctx.from!.id)); await ctx.reply("👋 Привет!\n\n" + mainMenuText(user.timezone), { reply_markup: mainMenuKeyboard }); });
+  bot.command("menu", async (ctx) => { const user = await getOrCreateUser(BigInt(ctx.from!.id)); await ctx.reply(mainMenuText(user.timezone), { reply_markup: mainMenuKeyboard }); });
+  bot.callbackQuery("menu:main", async (ctx) => { const user = await getOrCreateUser(BigInt(ctx.from.id)); await ctx.answerCallbackQuery(); await ctx.reply(mainMenuText(user.timezone), { reply_markup: mainMenuKeyboard }); });
   bot.callbackQuery(/^notes:voice_replace:(\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const noteId = Number(ctx.match[1]); const user = await getOrCreateUser(BigInt(ctx.from.id)); const note = await getOwnedNote(user.id, noteId); if (!note?.voiceFileId) { await ctx.editMessageText("Голосовая заметка не найдена."); return; } await setSessionStep(user.id, SessionStep.NOTE_VOICE_REPLACE_AWAITING, { noteId }); await ctx.editMessageText("🎙️ Отправьте новое голосовое сообщение. Оно заменит текущее голосовое в этой заметке.", { reply_markup: cancelKeyboard }); });
   bot.use(todayComposer);
   bot.use(shiftCalendarComposer);
@@ -47,6 +47,6 @@ export function registerHandlers(bot: Bot): void {
     const voiceFileId = ctx.message.voice.file_id; const note = await createVoiceNote(user.id, voiceFileId); const notes = await listNotes(user.id); const noteNumber = notes.findIndex((item) => item.id === note.id) + 1;
     await ctx.reply(`📝 Заметка #${noteNumber}\n\n🎙️ Голосовое сообщение`, { reply_markup: voiceNoteSavedKeyboard(note.id) });
   });
-  bot.on("message", async (ctx, next) => { if (ctx.message.text?.startsWith("/")) { const user = await getOrCreateUser(BigInt(ctx.from!.id)); await clearSession(user.id); await ctx.reply("Неизвестная команда. Используйте /today, /notes, /reminders, /shifts или /saved."); return; } await next(); });
+  bot.on("message", async (ctx, next) => { if (ctx.message.text?.startsWith("/")) { const user = await getOrCreateUser(BigInt(ctx.from!.id)); await clearSession(user.id); await ctx.reply("Неизвестная команда. Используйте кнопки меню или /today, /notes, /reminders, /shifts, /calendar и /saved.", { reply_markup: mainMenuKeyboard }); return; } await next(); });
   bot.catch((err) => { console.error("Bot error:", err.message); });
 }
