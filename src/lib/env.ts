@@ -2,7 +2,6 @@ export interface RuntimeEnv {
   DB: D1Database;
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_WEBHOOK_SECRET: string;
-  CRON_SECRET: string;
   ALLOWED_TELEGRAM_IDS?: string;
 }
 
@@ -12,7 +11,7 @@ export function setRuntimeEnv(value: RuntimeEnv): void {
   currentEnv = value;
 }
 
-function required(name: "TELEGRAM_BOT_TOKEN" | "TELEGRAM_WEBHOOK_SECRET" | "CRON_SECRET"): string {
+function required(name: "TELEGRAM_BOT_TOKEN" | "TELEGRAM_WEBHOOK_SECRET"): string {
   const value = currentEnv?.[name];
   if (!value || value.trim() === "") {
     throw new Error("Missing required Worker secret: " + name);
@@ -26,9 +25,6 @@ export const env = {
   },
   get TELEGRAM_WEBHOOK_SECRET(): string {
     return required("TELEGRAM_WEBHOOK_SECRET");
-  },
-  get CRON_SECRET(): string {
-    return required("CRON_SECRET");
   },
   get ALLOWED_TELEGRAM_IDS(): bigint[] {
     const raw = currentEnv?.ALLOWED_TELEGRAM_IDS?.trim() ?? "";
