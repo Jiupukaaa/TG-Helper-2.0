@@ -14,6 +14,7 @@ export const SessionStep = {
   SHIFT_CYCLE_AWAITING_END_DATE: "SHIFT_CYCLE_AWAITING_END_DATE",
   SHIFT_CYCLE_AWAITING_NAME: "SHIFT_CYCLE_AWAITING_NAME",
   SHIFT_EDIT_AWAITING_NAME: "SHIFT_EDIT_AWAITING_NAME",
+  SHIFT_FREE_TIME_SELECTING: "SHIFT_FREE_TIME_SELECTING",
 } as const;
 export type SessionStep = (typeof SessionStep)[keyof typeof SessionStep];
 export const ReminderStatus = {

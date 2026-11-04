@@ -11,7 +11,7 @@ export type ReminderDraft = {
   editReminderId?: number;
 };
 export type NoteEditDraft = { noteId?: number };
-export type ShiftDraft = { dates?: string[]; calendarMonth?: string; time?: string; endTime?: string; workDays?: number; offDays?: number; firstDate?: string; editShiftId?: number; pendingStarts?: string[]; pendingEnds?: string[]; freeTime?: boolean; freeStartDate?: string };
+export type ShiftDraft = { dates?: string[]; calendarMonth?: string; time?: string; endTime?: string; workDays?: number; offDays?: number; firstDate?: string; editShiftId?: number; pendingStarts?: string[]; pendingEnds?: string[]; freeTime?: boolean; freeMode?: "single" | "range"; freeStartDate?: string; freeEndDate?: string };
 export type SessionDraft = ReminderDraft & NoteEditDraft & ShiftDraft & { ids?: number[] };
 
 type UserRow = Omit<User, "createdAt" | "updatedAt"> & { createdAt: string; updatedAt: string };
