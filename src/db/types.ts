@@ -26,6 +26,6 @@ export type ReminderStatus = (typeof ReminderStatus)[keyof typeof ReminderStatus
 export type User = { id: number; telegramId: number; timezone: string; createdAt: Date; updatedAt: Date };
 export type Note = { id: number; text: string; voiceFileId: string | null; ownerId: number; createdAt: Date; updatedAt: Date };
 export type SavedItem = { id: number; type: "LINK" | "PHOTO" | "GIF"; url: string | null; fileId: string | null; ownerId: number; createdAt: Date; updatedAt: Date };
-export type Shift = { id: number; name: string | null; startAt: Date; ownerId: number; cycleGroupId: string | null; createdAt: Date; updatedAt: Date };
+export type Shift = { id: number; name: string | null; startAt: Date; endAt: Date | null; ownerId: number; cycleGroupId: string | null; createdAt: Date; updatedAt: Date };
 export type Reminder = { id: number; text: string; voiceFileId: string | null; dueAt: Date; status: ReminderStatus; processingStartedAt: Date | null; sentAt: Date | null; retryCount: number; lastError: string | null; ownerId: number; shiftId: number | null; offsetMinutes: number | null; repeatGroupId: string | null; repeatRule: string | null; createdAt: Date; updatedAt: Date };
 export type Session = { id: number; userId: number; step: SessionStep; draft: Record<string, unknown> | null; updatedAt: Date };
