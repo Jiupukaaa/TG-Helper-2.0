@@ -396,3 +396,6 @@ export async function handleNotesVoiceInput(ctx: any, userId: number): Promise<b
 
   return false;
 }
+
+
+notesComposer.hears("📝 Заметки", async (ctx) => { const user = await getOrCreateUser(BigInt(ctx.from!.id)); const result = await getNotesListPage(user.id, 0); const replyMarkup = getNotesListReplyMarkup(result.page, result.totalPages, result.voiceNotes); await ctx.reply(`${result.text}${result.totalPages > 1 ? `\\n\\n📄 Страница 1 из ${result.totalPages}` : ""}`, { reply_markup: replyMarkup }); });
