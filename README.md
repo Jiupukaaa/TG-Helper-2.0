@@ -138,7 +138,6 @@ Cloudflare Worker: tg-helper-2-0
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | Secret | Токен Telegram-бота от BotFather |
 | `TELEGRAM_WEBHOOK_SECRET` | Secret | Секрет проверки Telegram webhook |
-| `CRON_SECRET` | Secret | Секрет для защищённого ручного запуска отправки напоминаний |
 | `ALLOWED_TELEGRAM_IDS` | Text | Разрешённые Telegram ID через запятую |
 
 `ALLOWED_TELEGRAM_IDS` — именно **Worker variable**, а не Build variable. Переменные в разделе **Builds** используются процессом сборки и не передаются автоматически работающему Worker.
@@ -226,7 +225,6 @@ Cloudflare вызывает метод `scheduled()` того же Worker каж
 
 1. `ALLOWED_TELEGRAM_IDS` ограничивает доступ к боту.
 2. `TELEGRAM_WEBHOOK_SECRET` проверяет подлинность входящих webhook-запросов.
-3. `CRON_SECRET` защищает endpoint ручного запуска отправки напоминаний.
 4. Пользователь работает только со своими заметками, напоминаниями, сменами и сохраненками.
 5. Секреты хранятся в Cloudflare Worker Secrets и не должны попадать в репозиторий.
 
