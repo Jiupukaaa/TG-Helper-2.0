@@ -261,6 +261,7 @@ export async function handleSavedTextInput(ctx: any, userId: number): Promise<bo
 export async function handleSavedPhotoInput(ctx: any, userId: number): Promise<boolean> {
   const photo = ctx.message?.photo;
   if (!photo?.length) return false;
+  if (await getSavedCommentSession(userId)) { await ctx.reply("Сейчас ожидаю текстовый комментарий. Отправьте его сообщением или отмените действие кнопкой."); return true; }
   const saved = await createSavedPhoto(userId, photo[photo.length - 1]!.file_id);
   const items = await listSavedItems(userId);
   const number = items.findIndex((item) => item.id === saved.id) + 1;
@@ -270,10 +271,17 @@ export async function handleSavedPhotoInput(ctx: any, userId: number): Promise<b
 export async function handleSavedGifInput(ctx: any, userId: number): Promise<boolean> {
   const animation = ctx.message?.animation;
   if (!animation?.file_id) return false;
+  if (await getSavedCommentSession(userId)) { await ctx.reply("Сейчас ожидаю текстовый комментарий. Отправьте его сообщением или отмените действие кнопкой."); return true; }
   const saved = await createSavedGif(userId, animation.file_id);
   const items = await listSavedItems(userId);
   const number = items.findIndex((item) => item.id === saved.id) + 1;
   await ctx.reply("🔖 Сохраненка #" + number + " — 🎞️ GIF сохранен.", { reply_markup: savedItemKeyboard(saved.id) });
+  return true;
+}
+
+export async function handleSavedVoiceInput(ctx: any, userId: number): Promise<boolean> {
+  if (!await getSavedCommentSession(userId)) return false;
+  await ctx.reply("Сейчас ожидаю текстовый комментарий. Отправьте его сообщением или отмените действие кнопкой.");
   return true;
 }
 
