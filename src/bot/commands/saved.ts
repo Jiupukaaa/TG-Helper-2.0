@@ -60,8 +60,8 @@ async function renderSavedList(ctx: any, userId: number, edit = true, filter: Fi
     const number = all.findIndex((x) => x.id === item.id) + 1;
     if (item.type === "PHOTO") keyboard.row().text("🖼️ Отправить фото #" + number, "saved:send:" + item.id);
     if (item.type === "GIF") keyboard.row().text("🎞️ Отправить GIF #" + number, "saved:send:" + item.id);
-    keyboard.row().text((item.comment ? "✏️ Изменить комментарий #" : "💬 Добавить комментарий #") + number, "saved:comment:start:" + item.id);
   });
+  keyboard.row().text("💬 Управление комментариями", "saved:comments");
   keyboard.row().text("🗑 Удалить", "saved:delete_mode").text("🗑 Удалить несколько", "saved:bulk");
   keyboard.row().text("⬅️ Назад", "menu:saved").text("🏠 Главное меню", "menu:main");
   const text = "🔖 Сохраненки\n\n" + counts + "\nФильтр: " +
@@ -71,6 +71,28 @@ async function renderSavedList(ctx: any, userId: number, edit = true, filter: Fi
 }
 function savedItemKeyboard(itemId: number) {
   return new InlineKeyboard().text("💬 Добавить комментарий", "saved:comment:start:" + itemId);
+}
+async function renderSavedCommentPicker(ctx: any, userId: number) {
+  const items = await listSavedItems(userId);
+  if (!items.length) {
+    await ctx.editMessageText("💬 Комментарии\n\nСохраненок пока нет.", {
+      reply_markup: new InlineKeyboard().text("⬅️ К списку", "saved:list"),
+    });
+    return;
+  }
+  const lines = items.map((item, index) =>
+    itemLabel(item, index + 1) + (item.comment ? "\n💬 " + item.comment : "\n💬 Комментарий ещё не добавлен")
+  );
+  const keyboard = new InlineKeyboard();
+  items.forEach((item, index) => {
+    const icon = item.comment ? "✏️" : "💬";
+    const type = item.type === "LINK" ? "ссылка" : item.type === "PHOTO" ? "фото" : "GIF";
+    keyboard.text(icon + " #" + (index + 1) + " " + type, "saved:comment:start:" + item.id).row();
+  });
+  keyboard.text("⬅️ К списку", "saved:list").text("🏠 Главное меню", "menu:main");
+  await ctx.editMessageText("💬 Выберите сохраненку, для которой хотите добавить или изменить комментарий:\n\n" + lines.join("\n\n"), {
+    reply_markup: keyboard,
+  });
 }
 async function showNextSortingItem(ctx: any, userId: number) {
   const item = await getNextUnsortedSavedItem(userId);
@@ -101,6 +123,11 @@ async function showNextSortingItem(ctx: any, userId: number) {
 savedComposer.command("saved", async (ctx) => { await renderSavedHome(ctx, false); });
 savedComposer.callbackQuery("menu:saved", async (ctx) => { await ctx.answerCallbackQuery(); await renderSavedHome(ctx, true); });
 savedComposer.callbackQuery("saved:list", async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); await renderSavedList(ctx, user.id); });
+savedComposer.callbackQuery("saved:comments", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const user = await getOrCreateUser(BigInt(ctx.from.id));
+  await renderSavedCommentPicker(ctx, user.id);
+});
 savedComposer.callbackQuery(/^saved:filter:(ALL|LINK|PHOTO|GIF)$/, async (ctx) => { await ctx.answerCallbackQuery(); const user = await getOrCreateUser(BigInt(ctx.from.id)); await renderSavedList(ctx, user.id, true, ctx.match[1] as Filter); });
 savedComposer.callbackQuery("saved:sort:start", async (ctx) => {
   await ctx.answerCallbackQuery();
